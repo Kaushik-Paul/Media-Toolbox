@@ -60,7 +60,7 @@ and will share the same private HF Storage Bucket.
 | Variable | Default | Purpose |
 |---|---|---|
 | `BUCKET_MOUNT` | `/data/media-bucket` | Mounted HF Storage Bucket path |
-| `HF_BUCKET_ID` | _(empty)_ | Bucket id, e.g. `user/media-toolbox-temp` (informational) |
+| `HF_BUCKET_ID` | _(empty)_ | Bucket id, e.g. `user/media-toolbox` (informational) |
 | `RETENTION_HOURS` | `24` | Output retention |
 | `WORK_DIR` | `/tmp/media-toolbox` | Ephemeral processing directory |
 | `MAX_CONCURRENT_CPU_JOBS` | `1` | Encoding concurrency (rest queue) |

@@ -32,7 +32,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 README_PATH = PROJECT_ROOT / "README.md"
 
 DEFAULT_SPACE_NAME = "media-toolbox-cpu"
-DEFAULT_BUCKET_NAME = "media-toolbox-temp"
+DEFAULT_BUCKET_NAME = "media-toolbox"
 BUCKET_MOUNT = "/data/media-bucket"
 
 # Extra excludes on top of .gitignore (paths relative to the repo root).

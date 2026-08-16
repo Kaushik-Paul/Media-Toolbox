@@ -12,7 +12,7 @@ A personal media-processing system hosted on Hugging Face Spaces, built per
 - **GPU Space** (`media-toolbox-gpu`, Gradio SDK + ZeroGPU): Whisper, Demucs,
   Real-ESRGAN. **Not built yet** — will be a separate effort; it must reuse the
   same manifest schema, bucket layout, and job-prefix convention.
-- Shared private HF Storage Bucket (`media-toolbox-temp`) mounted at
+- Shared private HF Storage Bucket (`media-toolbox`) mounted at
   `/data/media-bucket` holds outputs for 24 hours.
 
 ## Repository layout
