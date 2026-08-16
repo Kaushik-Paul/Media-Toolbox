@@ -13,9 +13,10 @@ Personal media-processing system for Hugging Face Spaces, built per `PLAN.md`.
 
 The CPU Space (`media-toolbox-cpu`) application code lives in **`main/`**
 (FastAPI + Gradio + FFmpeg); the `Dockerfile` at the repo root builds it, so
-the repository root can be deployed directly as the Docker Space. A GPU Space
-(`media-toolbox-gpu`, ZeroGPU: Whisper / Demucs / Real-ESRGAN) is planned next
-and will share the same private HF Storage Bucket.
+the repository root can be deployed directly as the Docker Space. The GPU Space
+(`media-toolbox-gpu`, ZeroGPU: Whisper / Demucs / Real-ESRGAN) lives in
+**`gpu/`** and shares the same private HF Storage Bucket, manifest schema, and
+24-hour job history.
 
 > The YAML frontmatter above is the Hugging Face Space configuration; copy this
 > README (or the frontmatter block) into the Space repository root when
@@ -40,6 +41,21 @@ Video, Audio, and Subtitle sections each have a shared session upload above
 their subtools. Upload a source once, then switch operations without uploading
 it again; Merge, Concatenate, Add Track, and Burn ask only for their additional
 inputs.
+
+## Features (GPU Space, ZeroGPU)
+
+- **AI Transcription** (Whisper large-v3-turbo): transcribe or translate to
+  English, 22 languages + auto-detect, segment or word-level timestamps,
+  outputs TXT + SRT + VTT + JSON
+- **Stem Separation** (Demucs htdemucs): vocals + instrumental or full 4-stem
+  split, WAV/FLAC/MP3 output with optional ZIP
+- **AI Upscaling** (Real-ESRGAN): images (General / Anime models, 2x/4x,
+  PNG/WebP/JPG) and short videos (experimental: chunked frame upscaling with
+  the original audio muxed back)
+- GPU work runs only inside `@spaces.GPU` functions with dynamic durations;
+  FFmpeg pre/post-processing stays on the CPU worker
+- Same 24-hour bucket history as the CPU Space; an optional header link jumps
+  back to it (`CPU_SPACE_URL`)
 
 ## Architecture
 
@@ -72,6 +88,20 @@ inputs.
 | `MAX_INPUT_SIZE_GB` | `8.0` | Upload size limit |
 | `PORT` | `7860` | HTTP port |
 
+GPU Space only:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `WHISPER_MODEL` | `openai/whisper-large-v3-turbo` | Transcription model |
+| `DEMUCS_MODEL` | `htdemucs` | Stem separation model |
+| `ENABLE_DEMUCS` | `true` | Enable the Stem Separation tool |
+| `ENABLE_REALESRGAN` | `true` | Enable the AI Upscaling tool |
+| `GPU_VIDEO_MAX_DURATION` | `120` | Video upscale length limit (seconds) |
+| `GPU_VIDEO_MAX_PIXELS` | `2073600` | Video upscale resolution limit (1080p) |
+| `GPU_VIDEO_MAX_FILE_SIZE_GB` | `1.0` | Video upscale input size limit |
+| `CPU_SPACE_URL` | _(empty)_ | Header link back to the CPU Space |
+| `MODEL_CACHE_DIR` | `$WORK_DIR/models` | Model weight cache directory |
+
 ## Local development
 
 ```bash
@@ -83,6 +113,14 @@ python app.py        # or: uvicorn app:app --host 0.0.0.0 --port 7860
 
 Without a bucket mounted at `/data/media-bucket`, a local dev bucket under
 `$WORK_DIR/bucket` is used automatically.
+
+The GPU Space also runs locally (models on CPU, `@spaces.GPU` is a no-op off
+ZeroGPU):
+
+```bash
+pip install -r requirements.txt   # repo-root file: GPU Space deps
+python gpu/app.py
+```
 
 ## Deployment
 
@@ -103,9 +141,9 @@ the git-visible repository contents, and optionally creates the private
 Storage Bucket. Its inferred hardware is `cpu-basic` for Docker; use
 `--hardware cpu-upgrade` if wanted.
 
-For the future ZeroGPU Space, keep this same README and change only its
-frontmatter before deploying. The GPU application must already exist at the
-chosen `app_file`, and its `requirements.txt` / `packages.txt` must be at the
+For the ZeroGPU Space, keep this same README and change only its frontmatter
+before deploying (restore the Docker block afterwards). The GPU application
+lives at `gpu/app.py`; its `requirements.txt` / `packages.txt` sit at the
 repository root because Gradio Spaces install dependencies from there.
 
 ```yaml
@@ -122,18 +160,23 @@ python_version: 3.10.13
 
 ```bash
 python main/scripts/deploy_space.py --dry-run
-python main/scripts/deploy_space.py --repo-id <user>/media-toolbox-gpu
+python main/scripts/deploy_space.py --repo-id <user>/media-toolbox-gpu \
+  --attach-bucket --bucket-id <user>/media-toolbox
 ```
 
 For `sdk: gradio`, the script infers `zero-a10g`. ZeroGPU does not support the
 Docker SDK, so only the existing CPU `Dockerfile` is needed; there should not
 be a second GPU Dockerfile.
 
+ZeroGPU usage draws from each visitor's daily quota (free accounts get little,
+PRO gets more), so the UI shows a quota banner and requests short dynamic
+durations for better queue priority.
+
 After deploying:
 
-1. Attach the same bucket read/write at `/data/media-bucket`. The CPU command
-   above does this automatically; for GPU, add `--attach-bucket --bucket-id
-   <user>/media-toolbox`.
+1. Attach the same bucket read/write at `/data/media-bucket`. Both deploy
+   commands above do this automatically (`--create-bucket` for CPU,
+   `--attach-bucket` for GPU).
 2. Create exactly one hourly cleanup job, not one per Space. The job needs both
    the CPU Space repository (read-only, for the script) and the bucket
    (read/write):

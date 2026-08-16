@@ -1,0 +1,26 @@
+# GPU Space (media-toolbox-gpu, ZeroGPU) dependencies.
+# Installed by the Gradio SDK builder from the repository root.
+# The CPU Docker image installs only main/requirements.txt and never this file.
+
+# ZeroGPU runtime ships PyTorch 2.8.x; keep this unpinned-minimum so pip sees
+# the preinstalled build as satisfied instead of reinstalling it.
+torch>=2.8
+
+transformers>=4.46
+accelerate>=0.34
+gradio>=6.0
+spaces
+huggingface_hub>=1.8.0
+pydantic>=2.6
+
+# FastAPI host app (health + expiry-checked download routes) with Gradio mounted.
+fastapi>=0.115
+uvicorn[standard]>=0.30
+
+# Audio/model I/O
+soundfile>=0.12
+numpy>=1.26
+pillow>=10.0
+
+# Stem separation (isolated: disable with ENABLE_DEMUCS=false if it ever conflicts)
+demucs>=4.0
