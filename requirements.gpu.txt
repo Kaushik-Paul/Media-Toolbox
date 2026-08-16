@@ -1,6 +1,6 @@
 # GPU Space (media-toolbox-gpu, ZeroGPU) dependencies.
 # Installed by the Gradio SDK builder from the repository root.
-# The CPU Docker image installs only main/requirements.txt and never this file.
+# The CPU Docker image installs only requirements.cpu.txt and never this file.
 
 # ZeroGPU runtime ships PyTorch 2.8.x; keep this unpinned-minimum so pip sees
 # the preinstalled build as satisfied instead of reinstalling it.

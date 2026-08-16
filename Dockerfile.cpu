@@ -21,8 +21,8 @@ ENV HOME=/home/user \
 
 WORKDIR /home/user/app
 
-COPY --chown=user:user main/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir --user -r requirements.txt
+COPY --chown=user:user requirements.cpu.txt ./requirements.cpu.txt
+RUN pip install --no-cache-dir --user -r requirements.cpu.txt
 
 COPY --chown=user:user main/ ./
 

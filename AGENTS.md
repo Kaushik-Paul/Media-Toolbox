@@ -10,7 +10,7 @@ A personal media-processing system hosted on Hugging Face Spaces, built per
 - **CPU Space** (`media-toolbox-cpu`, Docker SDK): general FFmpeg operations.
   Lives in `main/`. **This is built and working.**
 - **GPU Space** (`media-toolbox-gpu`, Gradio SDK + ZeroGPU): Whisper, Demucs,
-  Real-ESRGAN. Lives in `gpu/`. **This is built and working.** It reuses the
+  Real-ESRGAN. Lives in `main/gpu/`. **This is built and working.** It reuses the
   same manifest schema, bucket layout, and job-prefix convention.
 - Shared private HF Storage Bucket (`media-toolbox`) mounted at
   `/data/media-bucket` holds outputs for 24 hours.
@@ -20,14 +20,14 @@ A personal media-processing system hosted on Hugging Face Spaces, built per
 ```text
 README.md            # single README, includes HF Space YAML frontmatter
 PLAN.md              # full build specification
-Dockerfile           # at repo ROOT: builds the app from main/ (CPU Space builds here)
-requirements.txt     # at repo ROOT: GPU Space deps (Gradio Spaces install from root)
-packages.txt         # at repo ROOT: apt packages for the GPU Space (ffmpeg, libsndfile1)
+Dockerfile.cpu       # CPU Docker source; deployed as root Dockerfile
+requirements.cpu.txt # CPU Python dependencies
+requirements.gpu.txt # GPU deps; deployed as root requirements.txt
+packages.gpu.txt     # GPU apt deps; deployed as root packages.txt
 .dockerignore
-main/                # the CPU Space application code
+main/                # all CPU, GPU, and shared application logic
   app.py             # entrypoint: FastAPI + Gradio mounted at "/"
-  requirements.txt
-  scripts/deploy_space.py  # deploys the repo root as the Docker Space
+  scripts/deploy_space.py  # stages and deploys the selected CPU/GPU Space
   core/              # config, models, filenames, time_utils, media_types,
                      # manifests, storage/ (bucket + retention)
   backend/           # probe, capabilities, command_builder, ffmpeg_runner,
@@ -35,12 +35,11 @@ main/                # the CPU Space application code
   operations/        # one module per operation; registry in __init__.py
   ui/                # Gradio Blocks: app, theme, components, tools, history
   cleanup/cleanup.py # hourly expiry cleanup job (--dry-run, idempotent)
-gpu/                 # the GPU Space application code (ZeroGPU)
-  app.py             # entrypoint: FastAPI + Gradio; sys.path adds main/ for shared code
-  backend/           # config (GpuSettings + @gpu decorator), job_manager,
-                     # preprocessing, postprocessing, services
-  models/            # whisper.py, demucs.py, realesrgan.py (lazy heavy imports)
-  ui/                # common (OpUI), transcription, stems, upscale, history, app
+  gpu/               # the GPU Space application code (ZeroGPU)
+    app.py            # entrypoint: FastAPI + Gradio; adds main/ to sys.path
+    backend/          # config, job manager, pre/postprocessing, services
+    models/           # whisper.py, demucs.py, realesrgan.py
+    ui/               # common, transcription, stems, upscale, history, app
 ```
 
 No tests directory — the user asked to keep the repo without tests. Verify
@@ -50,7 +49,7 @@ changes by running the app and driving operations manually instead.
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate   # venv at REPO ROOT, never in main/
-pip install -r main/requirements.txt
+pip install -r requirements.cpu.txt
 cd main && python app.py                             # http://127.0.0.1:7860
 ```
 
@@ -93,13 +92,13 @@ Useful overrides: `WORK_DIR=/tmp/mt BUCKET_MOUNT=/tmp/mt-bucket`.
 - Logging: structured, includes `job_id`/`operation`/`stage`; never log media
   contents or tokens.
 
-## GPU Space conventions (gpu/)
+## GPU Space conventions (main/gpu/)
 
 - Reuses `main/core/*`, `main/backend/probe.py`, `main/backend/ffmpeg_runner.py`,
-  and `main/ui/theme.py` via sys.path insertion in `gpu/app.py` — never copy
-  them into `gpu/`.
+  and `main/ui/theme.py` via sys.path insertion in `main/gpu/app.py` — never
+  copy them into `main/gpu/`.
 - GPU work happens only inside `@gpu(duration=...)` functions
-  (`gpu/backend/config.py` wraps `spaces.GPU`, no-op off ZeroGPU). Dynamic
+  (`main/gpu/backend/config.py` wraps `spaces.GPU`, no-op off ZeroGPU). Dynamic
   duration callables must take the same arguments as the decorated function.
 - ZeroGPU runs each GPU function in a throwaway fork: load models in the MAIN
   process (`_get_pipeline()` / `_get_model()` called from `run()` before the
@@ -109,9 +108,9 @@ Useful overrides: `WORK_DIR=/tmp/mt BUCKET_MOUNT=/tmp/mt-bucket`.
   boots with models disabled or deps missing (PLAN.md rule 20).
 - Downloads/previews go through the FastAPI expiry-checked routes, never
   `allowed_paths` on the bucket.
-- No `gpu/README.md`, no GPU Dockerfile: the root README frontmatter is
-  switched to the gradio block for GPU deploys; root `requirements.txt` /
-  `packages.txt` belong to the GPU Space.
+- No `main/gpu/README.md`, no GPU Dockerfile: the root README frontmatter is
+  switched to the Gradio block for GPU deploys. The deploy helper maps root
+  `requirements.gpu.txt` / `packages.gpu.txt` to the builder filenames.
 
 ## Gradio 6 gotchas (this repo uses gradio>=6)
 
@@ -126,10 +125,10 @@ Useful overrides: `WORK_DIR=/tmp/mt BUCKET_MOUNT=/tmp/mt-bucket`.
 ## Verification checklist after changes
 
 1. `python -m compileall app.py core backend operations ui cleanup` (from
-   `main/`); for GPU changes, `python -m compileall gpu` from the repo root.
+   `main/`); for GPU changes, `python -m compileall main/gpu` from the repo root.
 2. Boot: `cd main && ../.venv/bin/python app.py`, check startup diagnostics log
    (encoders detected, bucket connected). For the GPU Space:
-   `.venv/bin/python gpu/app.py` from the repo root.
+   `.venv/bin/python main/gpu/app.py` from the repo root.
 3. Generate synthetic media with FFmpeg lavfi (`testsrc2`, `sine`) and run the
    affected operation through `backend.services.init_services().jobs.submit(...)`.
 4. Exercise the API: `/_health`, `/api/jobs`, download, delete.
@@ -139,10 +138,10 @@ Useful overrides: `WORK_DIR=/tmp/mt BUCKET_MOUNT=/tmp/mt-bucket`.
 ## Deployment
 
 - Use `main/scripts/deploy_space.py` (modeled on the Manga-Translator-OCR
-  helper): uploads git-visible repo-root files to the Docker Space repo (the
-  root Dockerfile builds from `main/`; the root README carries the
-  frontmatter). `--dry-run` previews, `--create-bucket` provisions the shared
-  bucket. Auth via `hf auth login` or `HF_TOKEN`.
+  helper): it stages the selected SDK package from git-visible files. CPU maps
+  `Dockerfile.cpu`; GPU maps `requirements.gpu.txt` and `packages.gpu.txt`.
+  `--dry-run` previews, `--create-bucket` provisions the shared bucket. Auth
+  via `hf auth login` or `HF_TOKEN`.
 - Attach private bucket at `/data/media-bucket` (read/write).
 - Schedule `python main/cleanup/cleanup.py --bucket /data/media-bucket` as an
   `@hourly` HF Job.

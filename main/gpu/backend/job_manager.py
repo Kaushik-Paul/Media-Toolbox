@@ -10,8 +10,8 @@ so GPU allocation never surrounds uploads, muxing, or metadata work
 (PLAN.md sections 44 and 82).
 
 This module reuses the shared core from ``main/`` (``core.*``,
-``backend.probe``, ``backend.ffmpeg_runner``); ``gpu/app.py`` puts ``main/``
-on ``sys.path`` before importing it.
+``backend.probe``, ``backend.ffmpeg_runner``); ``main/gpu/app.py`` puts
+``main/`` on ``sys.path`` before importing it.
 """
 from __future__ import annotations
 

@@ -1,17 +1,18 @@
 """Deploy the Space described by the root README to Hugging Face Spaces.
 
-Adapted from the deploy helper used in Manga-Translator-OCR: uploads only
-git-visible files (respecting .gitignore) plus extra deploy-only excludes, so
-the Space repo stays clean.
+Adapted from the deploy helper used in Manga-Translator-OCR: builds a temporary
+CPU- or GPU-specific deployment package from git-visible files (respecting
+.gitignore), so each Space repo receives only the infrastructure it can use.
 
 The root README.md is the single source of truth for the Space SDK and
-entrypoint. For the CPU Space it selects the Docker SDK; for the future GPU
-Space it selects the Gradio SDK and an app_file. This script never edits the
-README.
+entrypoint. For the CPU Space it maps ``Dockerfile.cpu`` to the required root
+``Dockerfile``. For the GPU Space it maps ``requirements.gpu.txt`` and
+``packages.gpu.txt`` to the names consumed by the Gradio builder. This script
+never edits the README.
 
 What it does:
-  1. Validates the root README Space metadata and matching local entrypoint.
-  2. Uploads git-visible repo files to the Space using that SDK.
+  1. Validates the root README Space metadata and matching local infrastructure.
+  2. Stages and uploads the SDK-specific package to the selected Space.
   3. Optionally creates the shared private Storage Bucket (--create-bucket).
 
 Auth: uses the cached `hf auth login` token or the HF_TOKEN env var.
@@ -28,7 +29,10 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
+import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from huggingface_hub import HfApi, Volume
@@ -48,6 +52,17 @@ DEFAULT_HARDWARE = {
 }
 DEFAULT_BUCKET_NAME = "media-toolbox"
 BUCKET_MOUNT = "/data/media-bucket"
+
+CPU_DOCKERFILE = "Dockerfile.cpu"
+CPU_REQUIREMENTS = "requirements.cpu.txt"
+GPU_REQUIREMENTS = "requirements.gpu.txt"
+GPU_PACKAGES = "packages.gpu.txt"
+INFRA_SOURCE_FILES = {
+    CPU_DOCKERFILE,
+    CPU_REQUIREMENTS,
+    GPU_REQUIREMENTS,
+    GPU_PACKAGES,
+}
 
 # Extra excludes on top of .gitignore (paths relative to the repo root).
 DEPLOY_IGNORE_PATTERNS = [
@@ -85,11 +100,56 @@ def git_visible_files() -> list[str]:
     ]
 
 
-def filtered_upload_files() -> list[str]:
+def filtered_source_files() -> list[str]:
     # git ls-files --cached can list paths deleted from disk but still staged.
     allow = [f for f in git_visible_files() if (PROJECT_ROOT / f).is_file()]
     return list(filter_repo_objects(allow, allow_patterns=allow,
                                     ignore_patterns=DEPLOY_IGNORE_PATTERNS))
+
+
+@dataclass(frozen=True)
+class DeploymentFile:
+    """A source-repository file and its path in the Space repository."""
+
+    source: str
+    destination: str
+
+
+def deployment_files(sdk: str) -> list[DeploymentFile]:
+    """Return the exact SDK-specific package, including infrastructure maps."""
+    files: list[DeploymentFile] = []
+    for path in filtered_source_files():
+        if path in INFRA_SOURCE_FILES:
+            continue
+        # The CPU image has no use for AI model code or its heavy dependencies.
+        if sdk == "docker" and path.startswith("main/gpu/"):
+            continue
+        files.append(DeploymentFile(path, path))
+
+    if sdk == "docker":
+        files.extend([
+            DeploymentFile(CPU_DOCKERFILE, "Dockerfile"),
+            DeploymentFile(CPU_REQUIREMENTS, CPU_REQUIREMENTS),
+        ])
+    else:
+        files.extend([
+            DeploymentFile(GPU_REQUIREMENTS, "requirements.txt"),
+            DeploymentFile(GPU_PACKAGES, "packages.txt"),
+        ])
+
+    destinations = [item.destination for item in files]
+    if len(destinations) != len(set(destinations)):
+        raise SystemExit("Deployment package contains duplicate destination paths.")
+    return sorted(files, key=lambda item: item.destination)
+
+
+def stage_deployment(files: list[DeploymentFile], stage_root: Path) -> None:
+    """Copy the selected package into an empty temporary Space repo root."""
+    for item in files:
+        source = PROJECT_ROOT / item.source
+        destination = stage_root / item.destination
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
 
 
 def read_space_metadata() -> dict:
@@ -106,12 +166,20 @@ def read_space_metadata() -> dict:
     metadata["sdk"] = sdk
 
     if sdk == "docker":
-        if not (PROJECT_ROOT / "Dockerfile").is_file():
-            raise SystemExit("README.md selects Docker, but the root Dockerfile is missing.")
+        for required in (CPU_DOCKERFILE, CPU_REQUIREMENTS):
+            if not (PROJECT_ROOT / required).is_file():
+                raise SystemExit(
+                    f"README.md selects Docker, but {required} is missing."
+                )
         app_port = metadata.get("app_port", 7860)
         if not isinstance(app_port, int) or not 1 <= app_port <= 65535:
             raise SystemExit("README.md app_port must be an integer between 1 and 65535.")
     else:
+        for required in (GPU_REQUIREMENTS, GPU_PACKAGES):
+            if not (PROJECT_ROOT / required).is_file():
+                raise SystemExit(
+                    f"README.md selects Gradio, but {required} is missing."
+                )
         app_file = str(metadata.get("app_file", "app.py")).strip()
         app_path = Path(app_file)
         if not app_file or app_path.is_absolute() or ".." in app_path.parts:
@@ -137,7 +205,8 @@ def resolve_space_id(api: HfApi, explicit: str | None, sdk: str) -> str:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Deploy the Space configured by root README.md, respecting .gitignore."
+            "Deploy the Space configured by root README.md using the matching "
+            "root infrastructure files."
         )
     )
     parser.add_argument("--repo-id",
@@ -177,18 +246,21 @@ def main() -> None:
     sdk = metadata["sdk"]
     hardware = args.hardware or DEFAULT_HARDWARE[sdk]
 
-    upload_files = filtered_upload_files()
-    upload_bytes = sum((PROJECT_ROOT / path).stat().st_size for path in upload_files)
+    upload_files = deployment_files(sdk)
+    upload_bytes = sum((PROJECT_ROOT / item.source).stat().st_size
+                       for item in upload_files)
     entrypoint = "Dockerfile" if sdk == "docker" else metadata.get("app_file", "app.py")
     print(f"Space config: sdk={sdk}, entrypoint={entrypoint}, hardware={hardware}")
     print(f"Upload set: {len(upload_files)} files, {upload_bytes / 1024:.1f} KiB")
 
     if args.dry_run:
-        for path in upload_files:
-            print(f"  {path}")
+        for item in upload_files:
+            mapping = (f" <- {item.source}"
+                       if item.source != item.destination else "")
+            print(f"  {item.destination}{mapping}")
         return
 
-    if "README.md" not in upload_files:
+    if not any(item.destination == "README.md" for item in upload_files):
         raise SystemExit("README.md is not in the upload set; check .gitignore.")
 
     space_id = resolve_space_id(api, args.repo_id, sdk)
@@ -208,14 +280,24 @@ def main() -> None:
         private=not args.public,
         space_hardware=hardware,
     )
-    api.upload_folder(
+    # create_repo(exist_ok=True) does not change an existing repo's visibility.
+    api.update_repo_settings(
         repo_id=space_id,
         repo_type="space",
-        folder_path=PROJECT_ROOT,
-        allow_patterns=upload_files,
-        ignore_patterns=DEPLOY_IGNORE_PATTERNS,
-        commit_message=f"Deploy Media Toolbox {sdk.title()} Space",
+        private=not args.public,
     )
+    with tempfile.TemporaryDirectory(prefix="media-toolbox-deploy-") as tmp:
+        stage_root = Path(tmp)
+        stage_deployment(upload_files, stage_root)
+        api.upload_folder(
+            repo_id=space_id,
+            repo_type="space",
+            folder_path=stage_root,
+            # Keep the remote Space an exact mirror of this selected package;
+            # additions in this commit supersede matching deletions.
+            delete_patterns="*",
+            commit_message=f"Deploy Media Toolbox {sdk.title()} Space",
+        )
     api.request_space_hardware(repo_id=space_id, hardware=hardware)
     print(f"Requested Space hardware: {hardware}")
     print(f"Space available at https://huggingface.co/spaces/{space_id}")
@@ -227,6 +309,10 @@ def main() -> None:
         )
         print(f"Attached {bucket_id} read/write at {BUCKET_MOUNT}")
 
+    cleanup_space_id = (
+        space_id if sdk == "docker"
+        else f"{namespace}/{DEFAULT_SPACE_NAMES['docker']}"
+    )
     print(
         "\nNext steps:\n"
         + (
@@ -240,7 +326,7 @@ def main() -> None:
         )
         + "  2. Create one cleanup schedule for the shared bucket (CPU deploy only):\n"
         f"       hf jobs scheduled run --name media-toolbox-cleanup "
-        f"--volume hf://spaces/{space_id}:/workspace:ro "
+        f"--volume hf://spaces/{cleanup_space_id}:/workspace:ro "
         f"--volume hf://buckets/{bucket_id}:{BUCKET_MOUNT} "
         f"@hourly python:3.12-slim python /workspace/main/cleanup/cleanup.py "
         f"--bucket {BUCKET_MOUNT}\n"

@@ -11,12 +11,16 @@ app_port: 7860
 
 Personal media-processing system for Hugging Face Spaces, built per `PLAN.md`.
 
-The CPU Space (`media-toolbox-cpu`) application code lives in **`main/`**
-(FastAPI + Gradio + FFmpeg); the `Dockerfile` at the repo root builds it, so
-the repository root can be deployed directly as the Docker Space. The GPU Space
-(`media-toolbox-gpu`, ZeroGPU: Whisper / Demucs / Real-ESRGAN) lives in
-**`gpu/`** and shares the same private HF Storage Bucket, manifest schema, and
-24-hour job history.
+Both applications live under **`main/`**. The CPU Space (`media-toolbox-cpu`)
+uses `main/app.py` (FastAPI + Gradio + FFmpeg), while the GPU Space
+(`media-toolbox-gpu`, ZeroGPU: Whisper / Demucs / Real-ESRGAN) uses
+`main/gpu/app.py`. They share the private HF Storage Bucket, manifest schema,
+and 24-hour job history.
+
+Space infrastructure stays at the repository root: `Dockerfile.cpu`,
+`requirements.cpu.txt`, `requirements.gpu.txt`, and `packages.gpu.txt`.
+`deploy_space.py` selects and renames the appropriate files to the root names
+required by the chosen Hugging Face SDK.
 
 > The YAML frontmatter above is the Hugging Face Space configuration; copy this
 > README (or the frontmatter block) into the Space repository root when
@@ -106,7 +110,7 @@ GPU Space only:
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r main/requirements.txt
+pip install -r requirements.cpu.txt
 cd main
 python app.py        # or: uvicorn app:app --host 0.0.0.0 --port 7860
 ```
@@ -118,8 +122,8 @@ The GPU Space also runs locally (models on CPU, `@spaces.GPU` is a no-op off
 ZeroGPU):
 
 ```bash
-pip install -r requirements.txt   # repo-root file: GPU Space deps
-python gpu/app.py
+pip install -r requirements.gpu.txt
+python main/gpu/app.py
 ```
 
 ## Deployment
@@ -136,15 +140,19 @@ python main/scripts/deploy_space.py --dry-run
 python main/scripts/deploy_space.py --repo-id <user>/media-toolbox-cpu --create-bucket
 ```
 
-The script creates Spaces as private by default (`--public` opts out), uploads
-the git-visible repository contents, and optionally creates the private
-Storage Bucket. Its inferred hardware is `cpu-basic` for Docker; use
-`--hardware cpu-upgrade` if wanted.
+The script creates Spaces as private by default (`--public` opts out), stages
+an SDK-specific package from the git-visible repository contents, and
+optionally creates the private Storage Bucket. For CPU it publishes
+`Dockerfile.cpu` as `Dockerfile`; its inferred hardware is `cpu-basic` (use
+`--hardware cpu-upgrade` if wanted). Each deployment makes the remote Space
+repository match the selected package, removing stale files from an older
+layout or SDK deployment.
 
 For the ZeroGPU Space, keep this same README and change only its frontmatter
 before deploying (restore the Docker block afterwards). The GPU application
-lives at `gpu/app.py`; its `requirements.txt` / `packages.txt` sit at the
-repository root because Gradio Spaces install dependencies from there.
+lives at `main/gpu/app.py`. The deploy helper publishes
+`requirements.gpu.txt` / `packages.gpu.txt` as root `requirements.txt` /
+`packages.txt`, which are the filenames the Gradio builder consumes.
 
 ```yaml
 ---
@@ -153,7 +161,7 @@ emoji: 🎬
 colorFrom: indigo
 colorTo: purple
 sdk: gradio
-app_file: gpu/app.py
+app_file: main/gpu/app.py
 python_version: 3.10.13
 ---
 ```
@@ -165,8 +173,8 @@ python main/scripts/deploy_space.py --repo-id <user>/media-toolbox-gpu \
 ```
 
 For `sdk: gradio`, the script infers `zero-a10g`. ZeroGPU does not support the
-Docker SDK, so only the existing CPU `Dockerfile` is needed; there should not
-be a second GPU Dockerfile.
+Docker SDK, so `Dockerfile.cpu` is the only Dockerfile source; the staged GPU
+Space contains no Dockerfile.
 
 ZeroGPU usage draws from each visitor's daily quota (free accounts get little,
 PRO gets more), so the UI shows a quota banner and requests short dynamic

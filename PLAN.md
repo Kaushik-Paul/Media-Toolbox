@@ -86,11 +86,11 @@ CPU FFmpeg and GPU AI processing should therefore remain separate.
 
 Develop everything initially as one monorepo.
 
-**Implemented + required GPU layout.** The repository root is the deployment
-source for both Spaces. The root `README.md` is the **only** Space metadata
-file. Its frontmatter selects which Space is being deployed. The root
-`Dockerfile` is used only by the CPU Space and builds `main/`; the future GPU
-Gradio application lives under `gpu/` and is selected with `app_file`.
+**Implemented + required combined layout.** All application logic lives under
+`main/`: the CPU application and shared modules remain directly under it, and
+the ZeroGPU application lives under `main/gpu/`. The repository root contains
+the single README plus deployment infrastructure for both targets. README
+frontmatter selects which Space is staged and deployed.
 
 ```text
 media-toolbox/
@@ -98,104 +98,109 @@ media-toolbox/
 ├── README.md            # root README; carries HF Space YAML frontmatter
 ├── .gitignore
 ├── .dockerignore
-├── Dockerfile           # the ONE Dockerfile; CPU Space only; builds main/
-├── requirements.txt     # GPU Gradio dependencies; create during GPU phase
-├── packages.txt         # GPU Gradio apt packages; create during GPU phase
+├── Dockerfile.cpu       # only Dockerfile source; deployed as Dockerfile
+├── requirements.cpu.txt # CPU dependencies used by Dockerfile.cpu
+├── requirements.gpu.txt # deployed as requirements.txt for Gradio
+├── packages.gpu.txt     # deployed as packages.txt for Gradio
 ├── PLAN.md
 ├── AGENTS.md
 ├── LICENSE
 │
-├── main/                # CPU Docker Space application
-│   ├── app.py           # entrypoint: FastAPI + Gradio mounted at "/"
-│   ├── requirements.txt
-│   │
-│   ├── core/            # shared across both Spaces (reused by the GPU Space)
-│   │   ├── config.py
-│   │   ├── models.py
-│   │   ├── filenames.py
-│   │   ├── time_utils.py
-│   │   ├── media_types.py
-│   │   ├── manifests.py
-│   │   └── storage/
-│   │       ├── bucket.py
-│   │       └── retention.py
-│   │
-│   ├── backend/
-│   │   ├── probe.py
-│   │   ├── capabilities.py
-│   │   ├── command_builder.py
-│   │   ├── ffmpeg_runner.py
-│   │   ├── job_manager.py
-│   │   ├── download.py
-│   │   ├── security.py
-│   │   └── services.py
-│   │
-│   ├── operations/      # one module per operation; registry in __init__.py
-│   │   ├── base.py
-│   │   ├── compress.py
-│   │   ├── target_size.py
-│   │   ├── resize.py
-│   │   ├── audio.py
-│   │   ├── convert.py
-│   │   ├── trim.py
-│   │   ├── fps.py
-│   │   ├── crop.py
-│   │   ├── rotate.py
-│   │   ├── speed.py
-│   │   ├── subtitles.py
-│   │   ├── merge.py
-│   │   ├── concatenate.py
-│   │   ├── gif.py
-│   │   ├── screenshot.py
-│   │   ├── metadata.py
-│   │   ├── compatibility.py
-│   │   └── advanced.py
-│   │
-│   ├── ui/
-│   │   ├── app.py
-│   │   ├── theme.py
-│   │   ├── components.py
-│   │   ├── tools.py
-│   │   └── history.py
-│   │
-│   ├── cleanup/
-│   │   └── cleanup.py
-│   │
-│   └── scripts/
-│       └── deploy_space.py   # metadata-driven CPU/GPU deploy helper
-│
-└── gpu/                 # future ZeroGPU Gradio Space application
-    ├── app.py           # README app_file: gpu/app.py
+└── main/                # all CPU, GPU, and shared application logic
+    ├── app.py           # entrypoint: FastAPI + Gradio mounted at "/"
+    │
+    ├── core/            # shared across both Spaces (reused by the GPU Space)
+    │   ├── config.py
+    │   ├── models.py
+    │   ├── filenames.py
+    │   ├── time_utils.py
+    │   ├── media_types.py
+    │   ├── manifests.py
+    │   └── storage/
+    │       ├── bucket.py
+    │       └── retention.py
+    │
     ├── backend/
-    │   ├── preprocessing.py
-    │   ├── postprocessing.py
-    │   └── job_manager.py
-    ├── models/
-    │   ├── whisper.py
-    │   ├── demucs.py
-    │   └── realesrgan.py
-    └── ui/
-        ├── app.py
-        ├── transcription.py
-        ├── stems.py
-        ├── upscale.py
-        └── history.py
+    │   ├── probe.py
+    │   ├── capabilities.py
+    │   ├── command_builder.py
+    │   ├── ffmpeg_runner.py
+    │   ├── job_manager.py
+    │   ├── download.py
+    │   ├── security.py
+    │   └── services.py
+    │
+    ├── operations/      # one module per operation; registry in __init__.py
+    │   ├── base.py
+    │   ├── compress.py
+    │   ├── target_size.py
+    │   ├── resize.py
+    │   ├── audio.py
+    │   ├── convert.py
+    │   ├── trim.py
+    │   ├── fps.py
+    │   ├── crop.py
+    │   ├── rotate.py
+    │   ├── speed.py
+    │   ├── subtitles.py
+    │   ├── merge.py
+    │   ├── concatenate.py
+    │   ├── gif.py
+    │   ├── screenshot.py
+    │   ├── metadata.py
+    │   ├── compatibility.py
+    │   └── advanced.py
+    │
+    ├── ui/
+    │   ├── app.py
+    │   ├── theme.py
+    │   ├── components.py
+    │   ├── tools.py
+    │   └── history.py
+    │
+    ├── cleanup/
+    │   └── cleanup.py
+    │
+    ├── scripts/
+    │   └── deploy_space.py   # stages the selected SDK package
+    │
+    └── gpu/              # ZeroGPU Gradio application
+        ├── app.py        # README app_file: main/gpu/app.py
+        ├── backend/
+        │   ├── preprocessing.py
+        │   ├── postprocessing.py
+        │   └── job_manager.py
+        ├── models/
+        │   ├── whisper.py
+        │   ├── demucs.py
+        │   └── realesrgan.py
+        └── ui/
+            ├── app.py
+            ├── transcription.py
+            ├── stems.py
+            ├── upscale.py
+            └── history.py
 ```
 
 Deviations from the original plan below, kept deliberately:
 
-- The GPU Space application will live specifically in `gpu/`, added during
-  Phase 5. It must reuse the schema and bucket conventions implemented in
-  `main/core/`; do not invent a second manifest or storage layout.
+- The GPU Space application lives specifically in `main/gpu/`. It reuses the
+  schema and bucket conventions implemented in `main/core/`; do not invent a
+  second manifest or storage layout.
 - Deployment is one metadata-driven Python script
   (`main/scripts/deploy_space.py`, using `huggingface_hub`) instead of
   per-Space shell scripts. It reads but never rewrites the root README.
-- There is exactly one README and exactly one Dockerfile in the monorepo.
-  **Do not create `gpu/README.md` or `gpu/Dockerfile`.** ZeroGPU is
+- There is exactly one README and one Dockerfile source in the monorepo.
+  **Do not create `main/gpu/README.md` or a GPU Dockerfile.** ZeroGPU is
   Gradio-only and cannot use the Docker SDK.
-- `main/requirements.txt` remains the CPU image dependency file. The future
-  root `requirements.txt` and `packages.txt` belong to the Gradio GPU Space,
-  because Gradio Spaces install dependency files from the repository root.
+- All infrastructure source files stay at repository root. The source names
+  are `Dockerfile.cpu`, `requirements.cpu.txt`, `requirements.gpu.txt`, and
+  `packages.gpu.txt`; none belong inside `main/`.
+- `deploy_space.py` builds an empty temporary staging directory. For CPU it
+  maps `Dockerfile.cpu` to `Dockerfile` and includes
+  `requirements.cpu.txt`. For GPU it maps `requirements.gpu.txt` to
+  `requirements.txt` and `packages.gpu.txt` to `packages.txt`, as required by
+  the Gradio builder. Non-selected infrastructure is not uploaded.
 - No `Makefile` / `pyproject.toml`.
 - No test files in the repository (see §66).
 
@@ -313,9 +318,11 @@ media-toolbox/
 
 Deployment still targets **two different HF Space repositories**. The monorepo is simply the development source.
 
-Both Hub repositories may contain the git-visible monorepo files. Hugging Face
-uses the root README metadata to decide which SDK/entrypoint to run; unrelated
-CPU/GPU source directories are inert for the other SDK.
+Each Hub repository receives an exact SDK-specific package assembled from the
+git-visible monorepo files. The CPU package omits `main/gpu/` and GPU
+infrastructure; the GPU package receives the combined `main/` tree and only
+the dependency filenames consumed by the Gradio builder. A deployment also
+removes stale remote files that are not in the selected package.
 
 ---
 
@@ -360,7 +367,7 @@ emoji: 🎬
 colorFrom: indigo
 colorTo: purple
 sdk: gradio
-app_file: gpu/app.py
+app_file: main/gpu/app.py
 python_version: 3.10.13
 ---
 ```
@@ -369,8 +376,8 @@ because ZeroGPU currently supports only the Gradio SDK. ([Hugging Face][3])
 
 These are two alternate frontmatter states of the **same root README.md**.
 The user manually changes the frontmatter before deploying each target. The
-deployment helper validates that the matching `Dockerfile` or `app_file`
-exists and refuses mismatched metadata. The Markdown body below the
+deployment helper validates the matching source infrastructure and `app_file`,
+then stages the filenames expected by that SDK. The Markdown body below the
 frontmatter stays unchanged.
 
 Do not put `private: true` in README frontmatter. Repository privacy is a Hub
@@ -384,12 +391,14 @@ uses `--public` only when explicitly requested.
 ```text
 read root README metadata without modifying it
 accept only sdk: docker or sdk: gradio
-validate Dockerfile for Docker or app_file for Gradio
+validate Dockerfile.cpu + requirements.cpu.txt for Docker
+validate requirements.gpu.txt + packages.gpu.txt + app_file for Gradio
 infer cpu-basic for Docker
 infer zero-a10g for Gradio
 create/update the selected private Space
 request the inferred/explicit hardware on every deployment
-upload only git-visible files plus deploy exclusions
+stage only git-visible files plus the selected infrastructure mappings
+delete stale files from the remote Space repository during the atomic upload
 optionally create and/or attach the shared bucket
 ```
 
@@ -1742,10 +1751,11 @@ accelerate
 huggingface_hub
 ```
 
-Put GPU Python dependencies in the root `requirements.txt`, not
-`gpu/requirements.txt`. Put Debian packages in the root `packages.txt`. Those
-root files are used by the Gradio SDK builder; the CPU Docker build continues
-to install only `main/requirements.txt` and is therefore isolated from the GPU
+Keep GPU Python dependencies in root `requirements.gpu.txt` and Debian
+packages in root `packages.gpu.txt`, never inside `main/gpu/`. During GPU
+deployment these are staged as `requirements.txt` and `packages.txt`, the
+filenames consumed by the Gradio SDK builder. The CPU Docker build installs
+only root `requirements.cpu.txt` and is therefore isolated from the GPU
 dependency set. Use `huggingface_hub>=1.8.0` anywhere Space/bucket volume APIs
 are required.
 
@@ -2781,7 +2791,7 @@ Expose them only through logs initially.
 # 77. README documentation
 
 Maintain exactly one source README at repository root. Do not add a README
-under `gpu/`. The same README body must cover both Spaces:
+under `main/gpu/`. The same README body must cover both Spaces:
 
 ```text
 Purpose
@@ -2838,10 +2848,11 @@ uvicorn app:app
 
 ---
 
-# 79. GPU `packages.txt`
+# 79. GPU dependency infrastructure
 
-The Gradio ZeroGPU Space should install required system packages through the
-**root** `packages.txt` (not `gpu/packages.txt`), including at minimum:
+The Gradio ZeroGPU Space should install required system packages from source
+file **root** `packages.gpu.txt`, staged as `packages.txt`, including at
+minimum:
 
 ```text
 ffmpeg
@@ -2851,9 +2862,10 @@ plus libraries required by chosen audio/image models.
 
 Keep GPU preprocessing FFmpeg features minimal rather than duplicating the complete CPU toolbox.
 
-The root GPU `requirements.txt` and `packages.txt` may coexist with the root
-CPU Dockerfile. The Dockerfile explicitly copies `main/requirements.txt`, so
-it must not install the GPU dependency set.
+The root CPU and GPU infrastructure sources coexist without using Hugging
+Face's reserved filenames in the development repository. `Dockerfile.cpu`
+explicitly installs `requirements.cpu.txt`; the deploy helper publishes only
+the selected target's infrastructure.
 
 ---
 
@@ -2954,9 +2966,9 @@ shared per-section upload contexts for Video, Audio, and Subtitles
 Implement:
 
 ```text
-gpu/app.py and the gpu/ package structure from §3
-root requirements.txt for GPU Python dependencies
-root packages.txt for ffmpeg and required system libraries
+main/gpu/app.py and the main/gpu/ package structure from §3
+root requirements.gpu.txt for GPU Python dependencies
+root packages.gpu.txt for ffmpeg and required system libraries
 Gradio ZeroGPU Space
 shared bucket
 GPU decorator architecture
@@ -2967,8 +2979,8 @@ expiry-checked download/preview routes (never direct bucket paths)
 Deployment exit criteria:
 
 ```text
-change root README to sdk: gradio + app_file: gpu/app.py
-run deploy_space.py --dry-run and confirm gradio / gpu/app.py / zero-a10g
+change root README to sdk: gradio + app_file: main/gpu/app.py
+run deploy_space.py --dry-run and confirm gradio / main/gpu/app.py / zero-a10g
 deploy to <username>/media-toolbox-gpu
 attach the existing <username>/media-toolbox bucket at /data/media-bucket
 verify GPU history can read CPU manifests
@@ -3068,9 +3080,9 @@ These rules should be treated as non-negotiable:
 19. **Do not use ZeroGPU xlarge unless required by measured VRAM demand.** ([Hugging Face][3])
 20. **The application must remain usable if Demucs or Real-ESRGAN is disabled.**
 21. **Maintain one root README; manually switch only its Space frontmatter before CPU/GPU deployment.**
-22. **Maintain one Dockerfile only, for the CPU Space; never add a GPU Dockerfile.**
-23. **The GPU entrypoint is `gpu/app.py`; GPU `requirements.txt` and `packages.txt` live at repository root.**
-24. **`deploy_space.py` must derive SDK/entrypoint/hardware from root README metadata and must never rewrite README.**
+22. **Maintain one Dockerfile source, root `Dockerfile.cpu`, for the CPU Space; never add a GPU Dockerfile.**
+23. **All application logic lives under `main/`; the GPU entrypoint is `main/gpu/app.py`.**
+24. **Root infrastructure sources are target-qualified; deploy maps them to the SDK-required filenames and never rewrites README.**
 25. **CPU defaults to `cpu-basic`; Gradio GPU defaults to `zero-a10g`; an explicit CLI hardware override is allowed.**
 26. **Both Space repositories are private by default through Hub settings, not a non-standard README `private` field.**
 27. **Both Spaces attach the same bucket read/write at `/data/media-bucket`.**
@@ -3217,7 +3229,7 @@ create GPU Space
         ↓
 root README selects sdk: gradio
         ↓
-deploy dry-run confirms gpu/app.py and zero-a10g
+deploy dry-run confirms main/gpu/app.py and zero-a10g
         ↓
 existing shared bucket attached at /data/media-bucket
         ↓
