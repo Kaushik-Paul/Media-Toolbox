@@ -109,3 +109,26 @@ def gpu(duration=None):
 
 def on_zerogpu() -> bool:
     return _spaces is not None and os.environ.get("SPACE_ID") is not None
+
+
+def report_zerogpu_startup() -> bool:
+    """Report registered GPU functions when Gradio is mounted under FastAPI.
+
+    ZeroGPU normally performs this step from its ``Blocks.launch`` patch. This
+    application uses ``mount_gradio_app`` and Uvicorn instead, so it must invoke
+    the equivalent startup hook after all decorated model modules are imported.
+    Returns whether the hook was available and called.
+    """
+    if not on_zerogpu():
+        return False
+
+    try:
+        from spaces import zero as spaces_zero
+    except (ImportError, AttributeError):
+        return False
+
+    startup = getattr(spaces_zero, "startup", None)
+    if not callable(startup):
+        return False
+    startup()
+    return True

@@ -1,5 +1,5 @@
 ---
-title: Media AI Toolbox
+title: Media GPU Toolbox
 emoji: 🎬
 colorFrom: green
 colorTo: indigo

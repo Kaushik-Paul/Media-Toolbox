@@ -1728,13 +1728,24 @@ History
 
 FFmpeg is still installed in this Space for CPU-side preprocessing and postprocessing.
 
-GPU inference happens only inside:
+GPU inference happens only inside functions decorated with:
 
 ```python
 @spaces.GPU(...)
 ```
 
-functions.
+Because the GPU application mounts Gradio inside FastAPI and starts Uvicorn
+instead of calling `Blocks.launch()`, it must explicitly invoke the available
+`spaces.zero.startup()` hook after all decorated model modules are imported.
+Without that registration step, ZeroGPU terminates startup with
+`No @spaces.GPU function detected during startup` even when decorated
+functions exist. Pass the already-built ASGI application object to
+`uvicorn.run`; do not re-import `gpu.app` by string and construct the app twice.
+The mount must also set `ssr_mode=False`: the Hugging Face Gradio runtime can
+enable SSR by environment variable, causing Gradio's Node process and Uvicorn
+to both bind port 7860. The GPU Space uses client-side Gradio rendering so
+Uvicorn remains the only public HTTP server and continues to serve the FastAPI
+health, job, expiry-checked download, and delete routes.
 
 ZeroGPU assigns the actual GPU while the decorated function runs. ([Hugging Face][3])
 
