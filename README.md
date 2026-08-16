@@ -1,21 +1,30 @@
 # Media Toolbox
 
-Personal media-processing system for Hugging Face Spaces, built per `PLAN.md`.
+Personal media-processing system hosted on Hugging Face Spaces.
 
-Both applications live under **`main/`**. The CPU Space (`media-toolbox-cpu`)
-uses `main/app.py` (FastAPI + Gradio + FFmpeg), while the GPU Space
-(`media-toolbox-gpu`, ZeroGPU: Whisper / Demucs / Real-ESRGAN) uses
-`main/gpu/app.py`. They share the private HF Storage Bucket, manifest schema,
+**Live: <https://www.mediatoolbox.pp.ua/>** — both Spaces are also directly
+reachable on Hugging Face (`media-toolbox-cpu` and `media-toolbox-gpu`).
+
+Two applications share one repository and one private HF Storage Bucket:
+
+- **CPU Space** (`media-toolbox-cpu`, Docker SDK) — general FFmpeg operations.
+  Entrypoint: `main/app.py` (FastAPI + Gradio + FFmpeg).
+- **GPU Space** (`media-toolbox-gpu`, Gradio SDK + ZeroGPU) — Whisper, Demucs,
+  Real-ESRGAN. Entrypoint: `main/gpu/app.py`.
+
+Both use the same manifest schema, bucket layout (`jobs/<expires>_<job_id>/`),
 and 24-hour job history.
 
 Space infrastructure stays at the repository root: `Dockerfile.cpu`,
 `requirements.cpu.txt`, `requirements.gpu.txt`, and `packages.gpu.txt`.
-`deploy_space.py` selects and renames the appropriate files to the root names
-required by the chosen Hugging Face SDK.
+`main/scripts/deploy_space.py` stages an SDK-specific package and maps those
+files to the root names the chosen HF builder expects.
 
-> The YAML frontmatter above is the Hugging Face Space configuration; copy this
-> README (or the frontmatter block) into the Space repository root when
-> deploying.
+> **Deploying requires Space frontmatter.** This README intentionally carries
+> none; `main/scripts/deploy_space.py` reads `sdk:` from the YAML frontmatter
+> at the top of the root README and exits without it. Before deploying, paste
+> the matching block from **`gradio_sdk.txt`** (Docker for the CPU Space,
+> Gradio for the GPU Space) above the title, deploy, then remove it again.
 
 ## Features (CPU Space)
 
@@ -72,6 +81,8 @@ inputs.
 
 ## Configuration (Space secrets / env vars)
 
+Shared:
+
 | Variable | Default | Purpose |
 |---|---|---|
 | `BUCKET_MOUNT` | `/data/media-bucket` | Mounted HF Storage Bucket path |
@@ -99,6 +110,8 @@ GPU Space only:
 
 ## Local development
 
+CPU Space:
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.cpu.txt
@@ -109,8 +122,7 @@ python app.py        # or: uvicorn app:app --host 0.0.0.0 --port 7860
 Without a bucket mounted at `/data/media-bucket`, a local dev bucket under
 `$WORK_DIR/bucket` is used automatically.
 
-The GPU Space also runs locally (models on CPU, `@spaces.GPU` is a no-op off
-ZeroGPU):
+GPU Space (models run on CPU locally; `@spaces.GPU` is a no-op off ZeroGPU):
 
 ```bash
 pip install -r requirements.gpu.txt
@@ -119,12 +131,12 @@ python main/gpu/app.py
 
 ## Deployment
 
-`README.md` is the only Space metadata file. The deployment helper reads its
-frontmatter and never rewrites it. The current block selects the CPU Docker
-Space, so deploy it with:
+Deploying requires the matching YAML frontmatter at the top of this README —
+the script refuses to run without it. Paste the Docker block from
+`gradio_sdk.txt`, deploy the CPU Space, then remove it:
 
 ```bash
-# preview the upload set
+# preview the staged package
 python main/scripts/deploy_space.py --dry-run
 
 # deploy (uses `hf auth login` token or HF_TOKEN)
@@ -136,24 +148,21 @@ SDK-specific package from the git-visible repository contents, and optionally
 creates the shared Storage Bucket as private. For CPU it publishes
 `Dockerfile.cpu` as `Dockerfile`; its inferred hardware is `cpu-basic` (use
 `--hardware cpu-upgrade` if wanted). Each deployment makes the remote Space
-repository match the selected package, removing stale files from an older
-layout or SDK deployment.
+repository an exact mirror of the selected package, removing stale files from
+an older layout or SDK deployment.
 
-For the ZeroGPU Space, keep this same README and change only its frontmatter
-before deploying (restore the Docker block afterwards). The GPU application
-lives at `main/gpu/app.py`. The deploy helper publishes
-`requirements.gpu.txt` / `packages.gpu.txt` as root `requirements.txt` /
-`packages.txt`, which are the filenames the Gradio builder consumes.
+For the ZeroGPU Space, swap in the Gradio frontmatter (both blocks are stashed
+in `gradio_sdk.txt`) before deploying — remove it again afterwards:
 
 ```yaml
 ---
-title: Media AI Toolbox
+title: Media GPU Toolbox
 emoji: 🎬
-colorFrom: indigo
-colorTo: purple
+colorFrom: green
+colorTo: indigo
 sdk: gradio
 app_file: main/gpu/app.py
-python_version: 3.10.13
+python_version: 3.12.12
 ---
 ```
 
@@ -165,7 +174,9 @@ python main/scripts/deploy_space.py --repo-id <user>/media-toolbox-gpu \
 
 For `sdk: gradio`, the script infers `zero-a10g`. ZeroGPU does not support the
 Docker SDK, so `Dockerfile.cpu` is the only Dockerfile source; the staged GPU
-Space contains no Dockerfile.
+Space contains no Dockerfile. The deploy helper publishes
+`requirements.gpu.txt` / `packages.gpu.txt` as root `requirements.txt` /
+`packages.txt`, which are the filenames the Gradio builder consumes.
 
 Because the Spaces are public and V1 has no user accounts, any visitor can use
 the tools and view the shared 24-hour job history exposed by the application.
