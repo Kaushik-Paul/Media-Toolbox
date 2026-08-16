@@ -5,7 +5,6 @@ colorFrom: indigo
 colorTo: purple
 sdk: docker
 app_port: 7860
-private: true
 ---
 
 # Media Toolbox
@@ -82,6 +81,10 @@ Without a bucket mounted at `/data/media-bucket`, a local dev bucket under
 
 ## Deployment
 
+`README.md` is the only Space metadata file. The deployment helper reads its
+frontmatter and never rewrites it. The current block selects the CPU Docker
+Space, so deploy it with:
+
 ```bash
 # preview the upload set
 python main/scripts/deploy_space.py --dry-run
@@ -90,13 +93,54 @@ python main/scripts/deploy_space.py --dry-run
 python main/scripts/deploy_space.py --repo-id <user>/media-toolbox-cpu --create-bucket
 ```
 
-The script uploads the git-visible repo contents to the Docker Space and
-optionally creates the private Storage Bucket. Then, once, in the Space
-settings UI:
+The script creates Spaces as private by default (`--public` opts out), uploads
+the git-visible repository contents, and optionally creates the private
+Storage Bucket. Its inferred hardware is `cpu-basic` for Docker; use
+`--hardware cpu-upgrade` if wanted.
 
-1. Attach the bucket at `/data/media-bucket` (read/write).
-2. Schedule an `@hourly` HF Job running
-   `python main/cleanup/cleanup.py --bucket /data/media-bucket`.
+For the future ZeroGPU Space, keep this same README and change only its
+frontmatter before deploying. The GPU application must already exist at the
+chosen `app_file`, and its `requirements.txt` / `packages.txt` must be at the
+repository root because Gradio Spaces install dependencies from there.
+
+```yaml
+---
+title: Media AI Toolbox
+emoji: 🎬
+colorFrom: indigo
+colorTo: purple
+sdk: gradio
+app_file: gpu/app.py
+python_version: 3.10.13
+---
+```
+
+```bash
+python main/scripts/deploy_space.py --dry-run
+python main/scripts/deploy_space.py --repo-id <user>/media-toolbox-gpu
+```
+
+For `sdk: gradio`, the script infers `zero-a10g`. ZeroGPU does not support the
+Docker SDK, so only the existing CPU `Dockerfile` is needed; there should not
+be a second GPU Dockerfile.
+
+After deploying:
+
+1. Attach the same bucket read/write at `/data/media-bucket`. The CPU command
+   above does this automatically; for GPU, add `--attach-bucket --bucket-id
+   <user>/media-toolbox`.
+2. Create exactly one hourly cleanup job, not one per Space. The job needs both
+   the CPU Space repository (read-only, for the script) and the bucket
+   (read/write):
+
+```bash
+hf jobs scheduled run \
+  --name media-toolbox-cleanup \
+  --volume hf://spaces/<user>/media-toolbox-cpu:/workspace:ro \
+  --volume hf://buckets/<user>/media-toolbox:/data/media-bucket \
+  @hourly python:3.12-slim \
+  python /workspace/main/cleanup/cleanup.py --bucket /data/media-bucket
+```
 
 ## Security model
 
