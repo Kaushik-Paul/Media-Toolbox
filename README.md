@@ -1,10 +1,11 @@
 ---
-title: Media Toolbox
+title: Media AI Toolbox
 emoji: 🎬
-colorFrom: indigo
-colorTo: purple
-sdk: docker
-app_port: 7860
+colorFrom: green
+colorTo: indigo
+sdk: gradio
+app_file: main/gpu/app.py
+python_version: 3.12.12
 ---
 
 # Media Toolbox
@@ -140,9 +141,9 @@ python main/scripts/deploy_space.py --dry-run
 python main/scripts/deploy_space.py --repo-id <user>/media-toolbox-cpu --create-bucket
 ```
 
-The script creates Spaces as private by default (`--public` opts out), stages
-an SDK-specific package from the git-visible repository contents, and
-optionally creates the private Storage Bucket. For CPU it publishes
+The script creates and keeps both application Spaces public, stages an
+SDK-specific package from the git-visible repository contents, and optionally
+creates the shared Storage Bucket as private. For CPU it publishes
 `Dockerfile.cpu` as `Dockerfile`; its inferred hardware is `cpu-basic` (use
 `--hardware cpu-upgrade` if wanted). Each deployment makes the remote Space
 repository match the selected package, removing stale files from an older
@@ -175,6 +176,10 @@ python main/scripts/deploy_space.py --repo-id <user>/media-toolbox-gpu \
 For `sdk: gradio`, the script infers `zero-a10g`. ZeroGPU does not support the
 Docker SDK, so `Dockerfile.cpu` is the only Dockerfile source; the staged GPU
 Space contains no Dockerfile.
+
+Because the Spaces are public and V1 has no user accounts, any visitor can use
+the tools and view the shared 24-hour job history exposed by the application.
+The underlying bucket itself remains private.
 
 ZeroGPU usage draws from each visitor's daily quota (free accounts get little,
 PRO gets more), so the UI shows a quota banner and requests short dynamic

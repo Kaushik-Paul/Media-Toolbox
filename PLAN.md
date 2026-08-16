@@ -341,7 +341,10 @@ Bucket:
 <username>/media-toolbox
 ```
 
-Make all three **private** by default because media files may contain personal content.
+Make both application Spaces **public**. Keep the shared Storage Bucket
+**private** because media files may contain personal content. Since V1 has no
+user accounts, the public application exposes its shared 24-hour history to
+visitors even though the bucket itself is not public.
 
 The CPU Space should use:
 
@@ -380,9 +383,9 @@ deployment helper validates the matching source infrastructure and `app_file`,
 then stages the filenames expected by that SDK. The Markdown body below the
 frontmatter stays unchanged.
 
-Do not put `private: true` in README frontmatter. Repository privacy is a Hub
-repository setting; `deploy_space.py` creates Spaces private by default and
-uses `--public` only when explicitly requested.
+Do not put `private: true` in README frontmatter. Repository visibility is a
+Hub setting; `deploy_space.py` explicitly keeps both Spaces public on every
+deployment while bucket creation remains private.
 
 ## Deployment contract
 
@@ -395,7 +398,7 @@ validate Dockerfile.cpu + requirements.cpu.txt for Docker
 validate requirements.gpu.txt + packages.gpu.txt + app_file for Gradio
 infer cpu-basic for Docker
 infer zero-a10g for Gradio
-create/update the selected private Space
+create/update the selected public Space
 request the inferred/explicit hardware on every deployment
 stage only git-visible files plus the selected infrastructure mappings
 delete stale files from the remote Space repository during the atomic upload
@@ -2858,6 +2861,10 @@ minimum:
 ffmpeg
 ```
 
+Keep this file to one Debian package name per non-empty line. Do not add `#`
+comments: the Hugging Face Gradio builder passes every whitespace-separated
+token through `xargs` to `apt-get`, so comment text is treated as package names.
+
 plus libraries required by chosen audio/image models.
 
 Keep GPU preprocessing FFmpeg features minimal rather than duplicating the complete CPU toolbox.
@@ -3084,7 +3091,7 @@ These rules should be treated as non-negotiable:
 23. **All application logic lives under `main/`; the GPU entrypoint is `main/gpu/app.py`.**
 24. **Root infrastructure sources are target-qualified; deploy maps them to the SDK-required filenames and never rewrites README.**
 25. **CPU defaults to `cpu-basic`; Gradio GPU defaults to `zero-a10g`; an explicit CLI hardware override is allowed.**
-26. **Both Space repositories are private by default through Hub settings, not a non-standard README `private` field.**
+26. **Both Space repositories are public through Hub settings; the shared Storage Bucket remains private.**
 27. **Both Spaces attach the same bucket read/write at `/data/media-bucket`.**
 28. **Create one hourly cleanup job for the shared bucket, with explicit Space-repo and bucket volume mounts.**
 29. **Never expose physical bucket paths through Gradio file components or `allowed_paths`; all downloads/previews must enforce expiry.**
