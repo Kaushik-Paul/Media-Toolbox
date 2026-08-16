@@ -1,13 +1,3 @@
----
-title: Media GPU Toolbox
-emoji: 🎬
-colorFrom: green
-colorTo: indigo
-sdk: gradio
-app_file: main/gpu/app.py
-python_version: 3.12.12
----
-
 # Media Toolbox
 
 Personal media-processing system for Hugging Face Spaces, built per `PLAN.md`.
