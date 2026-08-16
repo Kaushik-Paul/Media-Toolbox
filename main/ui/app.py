@@ -20,61 +20,64 @@ def build_blocks() -> gr.Blocks:
         gr.HTML(HEADER)
         with gr.Tabs():
             with gr.Tab("Video"):
+                video_source = tools.video_source_upload()
                 with gr.Tabs():
                     with gr.Tab("Compress"):
-                        tools.compress_tab()
+                        tools.compress_tab(video_source)
                     with gr.Tab("Target Size"):
-                        tools.target_size_tab()
+                        tools.target_size_tab(video_source)
                     with gr.Tab("Resize"):
-                        tools.resize_tab()
+                        tools.resize_tab(video_source)
                     with gr.Tab("Convert"):
-                        tools.convert_tab()
+                        tools.convert_tab(video_source)
                     with gr.Tab("Trim / Cut"):
-                        tools.trim_tab()
+                        tools.trim_tab(video_source)
                     with gr.Tab("FPS"):
-                        tools.fps_tab()
+                        tools.fps_tab(video_source)
                     with gr.Tab("Rotate / Flip"):
-                        tools.rotate_tab()
+                        tools.rotate_tab(video_source)
                     with gr.Tab("Crop"):
-                        tools.crop_tab()
+                        tools.crop_tab(video_source)
                     with gr.Tab("Speed"):
-                        tools.speed_tab()
+                        tools.speed_tab(video_source)
                     with gr.Tab("Merge A+V"):
-                        tools.merge_tab()
+                        tools.merge_tab(video_source)
                     with gr.Tab("Concatenate"):
-                        tools.concatenate_tab()
+                        tools.concatenate_tab(video_source)
                     with gr.Tab("GIF"):
-                        tools.gif_tab()
+                        tools.gif_tab(video_source)
                     with gr.Tab("Screenshot"):
-                        tools.screenshot_tab()
+                        tools.screenshot_tab(video_source)
                     with gr.Tab("Remove Audio"):
-                        tools.remove_audio_tab()
+                        tools.remove_audio_tab(video_source)
             with gr.Tab("Audio"):
+                audio_source = tools.audio_source_upload()
                 with gr.Tabs():
                     with gr.Tab("Extract from Video"):
-                        tools.extract_audio_tab()
+                        tools.extract_audio_tab(audio_source)
                     with gr.Tab("Convert"):
-                        tools.convert_audio_tab()
+                        tools.convert_audio_tab(audio_source)
                     with gr.Tab("Compress"):
-                        tools.compress_audio_tab()
+                        tools.compress_audio_tab(audio_source)
                     with gr.Tab("Sample Rate"):
-                        tools.sample_rate_tab()
+                        tools.sample_rate_tab(audio_source)
                     with gr.Tab("Channels"):
-                        tools.channels_tab()
+                        tools.channels_tab(audio_source)
                     with gr.Tab("Normalize"):
-                        tools.normalize_tab()
+                        tools.normalize_tab(audio_source)
                     with gr.Tab("Trim"):
-                        tools.audio_trim_tab()
+                        tools.audio_trim_tab(audio_source)
                     with gr.Tab("Speed"):
-                        tools.audio_speed_tab()
+                        tools.audio_speed_tab(audio_source)
             with gr.Tab("Subtitles"):
+                subtitle_video, subtitle_file = tools.subtitle_source_uploads()
                 with gr.Tabs():
                     with gr.Tab("Extract"):
-                        tools.subtitles_extract_tab()
+                        tools.subtitles_extract_tab(subtitle_video)
                     with gr.Tab("Add Track"):
-                        tools.subtitles_add_tab()
+                        tools.subtitles_add_tab(subtitle_video, subtitle_file)
                     with gr.Tab("Burn"):
-                        tools.subtitles_burn_tab()
+                        tools.subtitles_burn_tab(subtitle_video, subtitle_file)
             with gr.Tab("Utilities"):
                 with gr.Tabs():
                     with gr.Tab("Make Compatible"):

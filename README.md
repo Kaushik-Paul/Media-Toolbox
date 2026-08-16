@@ -36,6 +36,11 @@ and will share the same private HF Storage Bucket.
 - **History**: outputs persist in a private HF Storage Bucket for **24 hours**,
   then download is denied (410) and an hourly cleanup job deletes them
 
+Video, Audio, and Subtitle sections each have a shared session upload above
+their subtools. Upload a source once, then switch operations without uploading
+it again; Merge, Concatenate, Add Track, and Burn ask only for their additional
+inputs.
+
 ## Architecture
 
 - FastAPI server with the Gradio UI mounted at `/`

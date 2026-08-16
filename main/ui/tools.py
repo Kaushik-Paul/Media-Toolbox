@@ -10,7 +10,7 @@ from backend.security import AdvancedArgsError, validate_advanced_args, validate
 from backend.services import get_services
 from operations.advanced import ALLOWED_EXTENSIONS
 from operations.crop import preview_crop
-from ui.components import OpUI, upload_row
+from ui.components import OpUI, UploadContext, upload_row
 
 VIDEO_UPLOAD = ["video"]
 AUDIO_UPLOAD = ["audio"]
@@ -43,13 +43,36 @@ def _audio_format_choices() -> list[str]:
     return [f for f in AUDIO_FORMATS if caps.has_encoder(needed[f])] or ["wav"]
 
 
+def video_source_upload() -> UploadContext:
+    gr.Markdown("Upload once, then use this video in any Video tool below.")
+    return upload_row("Shared video", VIDEO_UPLOAD)
+
+
+def audio_source_upload() -> UploadContext:
+    gr.Markdown("Upload once, then use this audio or video's audio track in any Audio tool below.")
+    return upload_row("Shared audio or video", AV_UPLOAD)
+
+
+def subtitle_source_uploads() -> tuple[UploadContext, gr.File]:
+    gr.Markdown(
+        "Upload the video once for every Subtitle tool. A subtitle file is shared by Add Track and Burn."
+    )
+    video = upload_row("Shared video", VIDEO_UPLOAD)
+    subtitle = gr.File(
+        label="Shared subtitle file (for Add Track or Burn)",
+        file_types=SUB_UPLOAD,
+        type="filepath",
+    )
+    return video, subtitle
+
+
 # ---------------------------------------------------------------------------
 # Video tabs
 # ---------------------------------------------------------------------------
 
 
-def compress_tab():
-    file, info, _ = upload_row("Drop a video here", VIDEO_UPLOAD)
+def compress_tab(source: UploadContext):
+    file = source.file
     with gr.Row():
         codec = gr.Dropdown(_codec_choices(), value="h264", label="Codec")
         quality = gr.Dropdown(["quick", "balanced", "high", "custom"], value="balanced", label="Quality")
@@ -80,8 +103,8 @@ def compress_tab():
     })
 
 
-def target_size_tab():
-    file, info, _ = upload_row("Drop a video here", VIDEO_UPLOAD)
+def target_size_tab(source: UploadContext):
+    file = source.file
     with gr.Row():
         target = gr.Number(label="Target size (MB)", value=200, minimum=1)
         audio_bitrate = gr.Dropdown(AUDIO_BITRATES, value="128k", label="Audio bitrate")
@@ -91,8 +114,8 @@ def target_size_tab():
     ui.wire("target_size", [file], {"target_mb": target, "audio_bitrate": audio_bitrate, "codec": codec})
 
 
-def resize_tab():
-    file, info, _ = upload_row("Drop a video here", VIDEO_UPLOAD)
+def resize_tab(source: UploadContext):
+    file = source.file
     with gr.Row():
         preset = gr.Dropdown(RESIZE_PRESETS, value="720p", label="Resolution")
         mode = gr.Radio(["fit", "exact"], value="fit", label="Sizing mode")
@@ -111,8 +134,8 @@ def resize_tab():
     })
 
 
-def convert_tab():
-    file, info, _ = upload_row("Drop a video or audio file here", AV_UPLOAD)
+def convert_tab(source: UploadContext):
+    file = source.file
     with gr.Row():
         container = gr.Dropdown(["mp4", "mkv", "mov", "webm"], value="mp4", label="Target container")
         mode = gr.Radio(["auto", "remux", "reencode"], value="auto", label="Mode")
@@ -121,8 +144,8 @@ def convert_tab():
     ui.wire("convert_format", [file], {"container": container, "mode": mode})
 
 
-def trim_tab():
-    file, info, _ = upload_row("Drop media here", AV_UPLOAD)
+def trim_tab(source: UploadContext):
+    file = source.file
     with gr.Row():
         start = gr.Textbox(label="Start", value="00:00:00", placeholder="HH:MM:SS or seconds")
         end = gr.Textbox(label="End", placeholder="HH:MM:SS or seconds (empty = end of file)")
@@ -132,8 +155,8 @@ def trim_tab():
     ui.wire("trim", [file], {"start": start, "end": end, "mode": mode})
 
 
-def fps_tab():
-    file, info, _ = upload_row("Drop a video here", VIDEO_UPLOAD)
+def fps_tab(source: UploadContext):
+    file = source.file
     with gr.Row():
         fps = gr.Dropdown(["60", "50", "30", "25", "24", "custom"], value="30", label="Target FPS")
         custom = gr.Number(label="Custom FPS", value=30, visible=False)
@@ -142,8 +165,8 @@ def fps_tab():
     ui.wire("fps_convert", [file], {"fps": fps, "custom_fps": custom})
 
 
-def rotate_tab():
-    file, info, _ = upload_row("Drop a video here", VIDEO_UPLOAD)
+def rotate_tab(source: UploadContext):
+    file = source.file
     transform = gr.Dropdown(
         [("90° clockwise", "90cw"), ("90° counterclockwise", "90ccw"), ("180°", "180"),
          ("Flip horizontal", "hflip"), ("Flip vertical", "vflip")],
@@ -153,8 +176,9 @@ def rotate_tab():
     ui.wire("rotate_flip", [file], {"transform": transform})
 
 
-def crop_tab():
-    file, info, info_state = upload_row("Drop a video here", VIDEO_UPLOAD)
+def crop_tab(source: UploadContext):
+    file = source.file
+    info_state = source.info_state
     preset = gr.Dropdown(["custom", "16:9", "9:16", "4:3", "1:1", "21:9"], value="custom", label="Aspect preset")
     with gr.Row():
         x = gr.Number(label="X", value=0, precision=0)
@@ -186,8 +210,8 @@ def crop_tab():
     ui.wire("crop_video", [file], {"preset": preset, "x": x, "y": y, "width": width, "height": height})
 
 
-def speed_tab():
-    file, info, _ = upload_row("Drop a video here", VIDEO_UPLOAD)
+def speed_tab(source: UploadContext):
+    file = source.file
     with gr.Row():
         speed = gr.Dropdown(["0.25", "0.5", "0.75", "1.25", "1.5", "2", "custom"], value="1.5", label="Speed")
         custom = gr.Number(label="Custom factor", value=1.5, visible=False)
@@ -197,8 +221,8 @@ def speed_tab():
     ui.wire("change_speed", [file], {"speed": speed, "custom_speed": custom})
 
 
-def merge_tab():
-    video = gr.File(label="Video file", file_types=VIDEO_UPLOAD, type="filepath")
+def merge_tab(source: UploadContext):
+    video = source.file
     audio = gr.File(label="Audio file", file_types=AUDIO_UPLOAD, type="filepath")
     with gr.Row():
         audio_mode = gr.Radio(
@@ -213,19 +237,24 @@ def merge_tab():
     ui.wire("merge_av", [video, audio], {"audio_mode": audio_mode, "length": length})
 
 
-def concatenate_tab():
-    files, info, _ = upload_row("Drop clips here (in order)", VIDEO_UPLOAD, file_count="multiple")
+def concatenate_tab(source: UploadContext):
+    files = gr.File(
+        label="Additional clips (shared video is first)",
+        file_count="multiple",
+        file_types=VIDEO_UPLOAD,
+        type="filepath",
+    )
     mode = gr.Radio(
         [("Fast join (same codec/resolution required)", "fast"),
          ("Compatible join (normalize + re-encode)", "compatible")],
         value="fast", label="Join mode",
     )
     ui = OpUI("Concatenate")
-    ui.wire("concatenate", [files], {"mode": mode})
+    ui.wire("concatenate", [source.file, files], {"mode": mode})
 
 
-def gif_tab():
-    file, info, _ = upload_row("Drop a video here", VIDEO_UPLOAD)
+def gif_tab(source: UploadContext):
+    file = source.file
     with gr.Row():
         start = gr.Textbox(label="Start", value="00:00:00")
         end = gr.Textbox(label="End", placeholder="empty = up to 30s limit")
@@ -236,8 +265,8 @@ def gif_tab():
     ui.wire("video_to_gif", [file], {"start": start, "end": end, "width": width, "fps": fps})
 
 
-def screenshot_tab():
-    file, info, _ = upload_row("Drop a video here", VIDEO_UPLOAD)
+def screenshot_tab(source: UploadContext):
+    file = source.file
     with gr.Row():
         timestamp = gr.Textbox(label="Timestamp", placeholder="HH:MM:SS or seconds (empty = auto)")
         fmt = gr.Dropdown(["jpg", "png", "webp"], value="jpg", label="Format")
@@ -245,8 +274,8 @@ def screenshot_tab():
     ui.wire("screenshot", [file], {"timestamp": timestamp, "format": fmt})
 
 
-def remove_audio_tab():
-    file, info, _ = upload_row("Drop a video here", VIDEO_UPLOAD)
+def remove_audio_tab(source: UploadContext):
+    file = source.file
     gr.Markdown("The video stream is copied without re-encoding; only the audio is dropped.")
     ui = OpUI("Remove audio")
     ui.wire("remove_audio", [file], {"mode": gr.State("remove_audio")})
@@ -257,75 +286,75 @@ def remove_audio_tab():
 # ---------------------------------------------------------------------------
 
 
-def _audio_tab(title: str, mode: str, options, run_label: str):
-    file, info, _ = upload_row(f"Drop an audio or video file here", AV_UPLOAD)
+def _audio_tab(source: UploadContext, mode: str, options, run_label: str):
+    file = source.file
     params = {"mode": gr.State(mode)}
     params.update(options)
     ui = OpUI(run_label)
     ui.wire(mode, [file], params)
 
 
-def extract_audio_tab():
+def extract_audio_tab(source: UploadContext):
     with gr.Row():
         fmt = gr.Dropdown(_audio_format_choices(), value="mp3", label="Format")
         extract_mode = gr.Radio(
             [("Convert", "convert"), ("Copy original audio", "copy")], value="convert", label="Mode"
         )
         bitrate = gr.Dropdown(AUDIO_BITRATES, value="192k", label="Bitrate (convert mode)")
-    _audio_tab("Extract audio", "extract_audio",
+    _audio_tab(source, "extract_audio",
                {"format": fmt, "extract_mode": extract_mode, "bitrate": bitrate}, "Extract audio")
 
 
-def convert_audio_tab():
+def convert_audio_tab(source: UploadContext):
     with gr.Row():
         fmt = gr.Dropdown(_audio_format_choices(), value="mp3", label="Target format")
         bitrate = gr.Dropdown(AUDIO_BITRATES, value="192k", label="Bitrate")
-    _audio_tab("Convert audio", "convert_audio", {"format": fmt, "bitrate": bitrate}, "Convert")
+    _audio_tab(source, "convert_audio", {"format": fmt, "bitrate": bitrate}, "Convert")
 
 
-def compress_audio_tab():
+def compress_audio_tab(source: UploadContext):
     with gr.Row():
         bitrate = gr.Dropdown(AUDIO_BITRATES, value="96k", label="Target bitrate")
         fmt = gr.Dropdown(_audio_format_choices(), value="mp3", label="Format")
-    _audio_tab("Compress audio", "compress_audio", {"bitrate": bitrate, "format": fmt}, "Compress")
+    _audio_tab(source, "compress_audio", {"bitrate": bitrate, "format": fmt}, "Compress")
 
 
-def sample_rate_tab():
+def sample_rate_tab(source: UploadContext):
     with gr.Row():
         rate = gr.Dropdown(["48000", "44100", "32000", "24000", "16000"], value="44100", label="Sample rate (Hz)")
         fmt = gr.Dropdown(LOSSLESS_FORMATS, value="flac", label="Format")
-    _audio_tab("Sample rate", "audio_sample_rate", {"sample_rate": rate, "format": fmt}, "Convert sample rate")
+    _audio_tab(source, "audio_sample_rate", {"sample_rate": rate, "format": fmt}, "Convert sample rate")
 
 
-def channels_tab():
+def channels_tab(source: UploadContext):
     with gr.Row():
         direction = gr.Radio([("Stereo to Mono", "mono"), ("Mono to Stereo", "stereo")],
                              value="mono", label="Channels")
         fmt = gr.Dropdown(LOSSLESS_FORMATS, value="flac", label="Format")
-    _audio_tab("Channels", "audio_channels", {"channels": direction, "format": fmt}, "Convert channels")
+    _audio_tab(source, "audio_channels", {"channels": direction, "format": fmt}, "Convert channels")
 
 
-def normalize_tab():
+def normalize_tab(source: UploadContext):
     with gr.Row():
         mode = gr.Radio([("Simple normalize", "simple"), ("EBU R128 loudness (two-pass)", "ebu")],
                         value="simple", label="Normalization")
         fmt = gr.Dropdown(LOSSLESS_FORMATS, value="flac", label="Format")
-    _audio_tab("Normalize", "audio_normalize", {"normalize_mode": mode, "format": fmt}, "Normalize")
+    _audio_tab(source, "audio_normalize", {"normalize_mode": mode, "format": fmt}, "Normalize")
 
 
-def audio_trim_tab():
+def audio_trim_tab(source: UploadContext):
     with gr.Row():
         start = gr.Textbox(label="Start", value="00:00:00")
         end = gr.Textbox(label="End", placeholder="empty = end of file")
         fmt = gr.Dropdown(LOSSLESS_FORMATS, value="flac", label="Format")
-    _audio_tab("Trim audio", "audio_trim", {"start": start, "end": end, "format": fmt}, "Extract segment")
+    _audio_tab(source, "audio_trim", {"start": start, "end": end, "format": fmt}, "Extract segment")
 
 
-def audio_speed_tab():
+def audio_speed_tab(source: UploadContext):
     with gr.Row():
         speed = gr.Dropdown(["0.5", "0.75", "1.25", "1.5", "2"], value="1.5", label="Speed")
         fmt = gr.Dropdown(LOSSLESS_FORMATS, value="flac", label="Format")
-    _audio_tab("Audio speed", "audio_speed", {"speed": speed, "format": fmt}, "Change speed")
+    _audio_tab(source, "audio_speed", {"speed": speed, "format": fmt}, "Change speed")
 
 
 # ---------------------------------------------------------------------------
@@ -345,33 +374,28 @@ def _stream_picker(info_state: gr.State):
     return picker
 
 
-def subtitles_extract_tab():
-    file, info, info_state = upload_row("Drop a video with subtitle tracks here", VIDEO_UPLOAD)
-    picker = _stream_picker(info_state)
+def subtitles_extract_tab(video: UploadContext):
+    picker = _stream_picker(video.info_state)
     fmt = gr.Dropdown(["srt", "vtt", "ass"], value="srt", label="Export format")
     ui = OpUI("Extract subtitles")
-    ui.wire("subtitles_extract", [file],
+    ui.wire("subtitles_extract", [video.file],
             {"mode": gr.State("subtitles_extract"), "stream_index": picker, "format": fmt})
 
 
-def subtitles_add_tab():
-    video = gr.File(label="Video file", file_types=VIDEO_UPLOAD, type="filepath")
-    sub = gr.File(label="Subtitle file", file_types=SUB_UPLOAD, type="filepath")
+def subtitles_add_tab(video: UploadContext, subtitle: gr.File):
     with gr.Row():
         language = gr.Textbox(label="Language code", value="eng", max_lines=1)
         title = gr.Textbox(label="Track title (optional)", max_lines=1)
     ui = OpUI("Add subtitle track")
-    ui.wire("subtitles_add", [video, sub],
+    ui.wire("subtitles_add", [video.file, subtitle],
             {"mode": gr.State("subtitles_add"), "language": language, "title": title})
 
 
-def subtitles_burn_tab():
-    file, info, info_state = upload_row("Drop a video here", VIDEO_UPLOAD)
-    sub = gr.File(label="Subtitle file (optional if embedded)", file_types=SUB_UPLOAD, type="filepath")
-    picker = _stream_picker(info_state)
+def subtitles_burn_tab(video: UploadContext, subtitle: gr.File):
+    picker = _stream_picker(video.info_state)
     gr.Markdown("Burning renders subtitles into the picture and requires re-encoding.")
     ui = OpUI("Burn subtitles")
-    ui.wire("subtitles_burn", [file, sub],
+    ui.wire("subtitles_burn", [video.file, subtitle],
             {"mode": gr.State("subtitles_burn"), "stream_index": picker})
 
 

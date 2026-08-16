@@ -4,6 +4,7 @@ from __future__ import annotations
 import html
 import time
 from pathlib import Path
+from typing import NamedTuple
 
 import gradio as gr
 
@@ -18,6 +19,14 @@ from operations.base import OperationError
 # ---------------------------------------------------------------------------
 # Upload + probe
 # ---------------------------------------------------------------------------
+
+
+class UploadContext(NamedTuple):
+    """A reusable upload component and its shared probe outputs."""
+
+    file: gr.File
+    info: gr.HTML
+    info_state: gr.State
 
 
 def file_paths(file_value) -> list[Path]:
@@ -281,10 +290,10 @@ class OpUI:
 
 
 def upload_row(label: str = "Drop media here", file_types: list[str] | None = None,
-               file_count: str = "single"):
+               file_count: str = "single") -> UploadContext:
     """Standard upload + auto-probe info card. Returns (file, info_html, info_state)."""
     file_input = gr.File(label=label, file_count=file_count, file_types=file_types, type="filepath")
     info_html = gr.HTML()
     info_state = gr.State({})
     file_input.change(fn=probe_upload, inputs=[file_input], outputs=[info_html, info_state])
-    return file_input, info_html, info_state
+    return UploadContext(file_input, info_html, info_state)
