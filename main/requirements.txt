@@ -3,4 +3,4 @@ uvicorn[standard]>=0.30
 gradio>=6.0
 pydantic>=2.6
 python-multipart>=0.0.9
-huggingface_hub>=0.26
+huggingface_hub>=1.8.0
