@@ -39,6 +39,7 @@ from core.storage.bucket import JobExpiredError, JobNotFoundError
 from core.storage.retention import seconds_until
 from core.time_utils import format_countdown
 
+from gpu.backend.config import on_zerogpu, report_zerogpu_startup
 from gpu.backend.services import get_services, init_services
 
 services = init_services()
@@ -140,10 +141,29 @@ app = gr.mount_gradio_app(
     css=CSS,
     allowed_paths=_allowed,
     max_file_size=f"{int(services.settings.max_input_size_gb)}gb",
+    # The Gradio SDK enables SSR on Hugging Face. With mount_gradio_app(),
+    # its Node process otherwise binds the same public port as Uvicorn.
+    # Client-side rendering keeps FastAPI/Uvicorn as the single HTTP server.
+    ssr_mode=False,
 )
+
+# ZeroGPU normally discovers decorated functions when Blocks.launch() runs.
+# This app mounts Gradio under FastAPI, so explicitly execute the equivalent
+# registration hook after build_blocks() has imported every model module.
+if on_zerogpu():
+    if report_zerogpu_startup():
+        logging.getLogger(__name__).info("ZeroGPU functions registered with scheduler")
+    else:
+        logging.getLogger(__name__).warning(
+            "ZeroGPU startup hook unavailable; scheduler registration may fail"
+        )
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("gpu.app:app", host="0.0.0.0", port=services.settings.port)
+    # Pass the already-built ASGI object. Importing "gpu.app:app" here would
+    # construct the Gradio application twice under the Gradio SDK launcher.
+    server_name = os.getenv("GRADIO_SERVER_NAME", "0.0.0.0")
+    server_port = int(os.getenv("GRADIO_SERVER_PORT", str(services.settings.port)))
+    uvicorn.run(app, host=server_name, port=server_port)
