@@ -1,0 +1,1 @@
+"""Bucket storage abstraction."""
