@@ -6,6 +6,7 @@ from pathlib import Path
 
 from core.filenames import output_name
 from operations.base import (
+    TEXT_SUBTITLE_CODECS,
     JobContext,
     OperationError,
     OperationResult,
@@ -64,21 +65,30 @@ def run(ctx: JobContext, inputs: list[Path], params: dict) -> OperationResult:
     passlog = str(ctx.work_dir / "twopass")
 
     common = ["-c:v", encoder, "-b:v", f"{video_kbps}k", "-preset", "medium"]
+    # MP4 can only carry text subtitles (stored as mov_text); bitmap tracks
+    # (PGS, VobSub, ...) are dropped rather than failing the whole encode.
+    text_subs = [s for s in info.subtitle_streams if s.codec_name in TEXT_SUBTITLE_CODECS]
 
-    # Pass 1 (analysis, no audio, null output)
+    # Pass 1 (analysis, video only, null output)
     b1 = ctx.builder()
     b1.input(src)
-    b1.add(*common, "-an", "-pass", 1, "-passlogfile", passlog, "-f", "null", os.devnull)
+    b1.add("-map", "0:v:0")
+    b1.add(*common, "-pass", 1, "-passlogfile", passlog, "-f", "null", os.devnull)
     run_ffmpeg(ctx, b1.build(), total_duration=duration, progress_offset=0, progress_span=50)
 
     # Pass 2
     b2 = ctx.builder()
     b2.input(src)
+    b2.add("-map", "0:v:0")
+    if info.has_audio:
+        b2.add("-map", "0:a:0?")
+    for s in text_subs:
+        b2.add("-map", f"0:{s.index}")
     b2.add(*common, "-pass", 2, "-passlogfile", passlog)
     if info.has_audio:
         b2.add("-c:a", "aac", "-b:a", f"{audio_bitrate_kbps}k")
-    else:
-        b2.add("-an")
+    if text_subs:
+        b2.add("-c:s", "mov_text")
     b2.add("-movflags", "+faststart")
     b2.output(part)
     run_ffmpeg(ctx, b2.build(), total_duration=duration, progress_offset=50, progress_span=50)

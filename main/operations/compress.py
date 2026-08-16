@@ -6,6 +6,7 @@ from pathlib import Path
 from core.filenames import output_name
 from operations.base import (
     QUALITY_PRESETS,
+    TEXT_SUBTITLE_CODECS,
     VIDEO_ENCODERS,
     JobContext,
     OperationError,
@@ -64,6 +65,10 @@ def run(ctx: JobContext, inputs: list[Path], params: dict) -> OperationResult:
 
     remove_audio = bool(params.get("remove_audio", False))
     audio_bitrate = str(params.get("audio_bitrate", "128k"))
+    keep_audio = not remove_audio and info.has_audio
+    # MP4 can only carry text subtitles (stored as mov_text); bitmap tracks
+    # (PGS, VobSub, ...) are dropped rather than failing the whole encode.
+    text_subs = [s for s in info.subtitle_streams if s.codec_name in TEXT_SUBTITLE_CODECS]
 
     out_name = output_name(info.filename, "compressed", out_ext)
     final = ctx.out_dir / out_name
@@ -71,20 +76,26 @@ def run(ctx: JobContext, inputs: list[Path], params: dict) -> OperationResult:
 
     b = ctx.builder()
     b.input(src)
+    b.add("-map", "0:v:0")
+    if keep_audio:
+        b.add("-map", "0:a:0?")
+    for s in text_subs:
+        b.add("-map", f"0:{s.index}")
     if filters:
         b.add("-vf", ",".join(filters))
     b.add("-c:v", encoder, "-preset", preset, "-crf", crf)
     if codec_key == "h264":
         b.add("-pix_fmt", "yuv420p")
-    if remove_audio or not info.has_audio:
-        b.add("-an")
-    elif audio_bitrate == "original":
-        b.add("-c:a", "copy")
-    else:
-        if audio_bitrate not in AUDIO_BITRATES:
-            raise OperationError(f"Unsupported audio bitrate: {audio_bitrate}")
-        require_encoder(ctx, "aac")
-        b.add("-c:a", "aac", "-b:a", audio_bitrate)
+    if keep_audio:
+        if audio_bitrate == "original":
+            b.add("-c:a", "copy")
+        else:
+            if audio_bitrate not in AUDIO_BITRATES:
+                raise OperationError(f"Unsupported audio bitrate: {audio_bitrate}")
+            require_encoder(ctx, "aac")
+            b.add("-c:a", "aac", "-b:a", audio_bitrate)
+    if text_subs:
+        b.add("-c:s", "mov_text")
     b.add("-movflags", "+faststart")
     b.output(part)
 

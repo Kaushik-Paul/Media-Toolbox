@@ -72,3 +72,16 @@ CSS = """
     .result-stats { gap: 1rem; }
 }
 """
+
+# Gradio follows the visitor's system/browser theme unless the URL carries
+# ?__theme=dark. This snippet (the workaround recommended by the Gradio
+# maintainers) redirects once to the dark-theme URL so the UI is always dark.
+FORCE_DARK_JS = """
+() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("__theme") !== "dark") {
+        url.searchParams.set("__theme", "dark");
+        window.location.replace(url.toString());
+    }
+}
+"""

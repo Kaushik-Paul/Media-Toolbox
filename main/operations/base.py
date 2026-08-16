@@ -210,6 +210,10 @@ COPY_COMPATIBLE_AUDIO = {
     "wav": {"pcm_s16le", "pcm_s24le", "pcm_f32le", "pcm_u8"},
 }
 
+# Subtitle codecs that are text-based and can be carried by MP4 (as mov_text).
+# Bitmap subtitles (PGS, VobSub, ...) cannot and are dropped for MP4 outputs.
+TEXT_SUBTITLE_CODECS = {"subrip", "ass", "ssa", "mov_text", "webvtt", "text"}
+
 QUALITY_PRESETS = {
     "quick": ("veryfast", 24),
     "balanced": ("medium", 23),
