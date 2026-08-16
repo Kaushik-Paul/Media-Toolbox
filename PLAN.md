@@ -768,25 +768,40 @@ Advanced
 History
 ```
 
-At the top of every operation:
+Place one shared uploader at the top of each primary media section, above its
+nested operation tabs:
 
 ```text
-┌──────────────────────────────────────────────┐
-│ Drop media here                             │
-│                                              │
-│                 Browse                       │
-└──────────────────────────────────────────────┘
+Video
+    shared video upload + probe card
+    Compress | Target Size | Resize | Convert | ...
 
-Filename
-Size
-Duration
-Resolution
-Codec
-FPS
 Audio
+    shared audio-or-video upload + probe card
+    Extract | Convert | Compress | Sample Rate | ...
+
+Subtitles
+    shared video upload + probe card
+    shared optional subtitle file
+    Extract | Add Track | Burn
 ```
 
-Use a generic file upload rather than forcing Gradio to convert the upload through `gr.Video`.
+Every subtool in a section must read the same upload component and probe state,
+so switching subtools never requires uploading the source again. The selection
+is scoped to the current Gradio session and remains temporary; it is not copied
+to the shared bucket.
+
+Tools that inherently need extra inputs request only those extras:
+
+```text
+Merge A+V      shared video + one audio file
+Concatenate    shared video first + additional clips
+Add Track      shared video + shared subtitle file
+Burn           shared video + shared optional subtitle file or embedded stream
+```
+
+Use generic file uploads rather than forcing Gradio to convert uploads through
+`gr.Video`.
 
 ---
 
@@ -2931,6 +2946,7 @@ screenshots
 metadata
 compatibility
 advanced FFmpeg
+shared per-section upload contexts for Video, Audio, and Subtitles
 ```
 
 ### Phase 5 — GPU foundation
@@ -3060,6 +3076,7 @@ These rules should be treated as non-negotiable:
 27. **Both Spaces attach the same bucket read/write at `/data/media-bucket`.**
 28. **Create one hourly cleanup job for the shared bucket, with explicit Space-repo and bucket volume mounts.**
 29. **Never expose physical bucket paths through Gradio file components or `allowed_paths`; all downloads/previews must enforce expiry.**
+30. **Video, Audio, and Subtitle subtools must reuse one session-scoped upload and probe state per section; only operation-specific secondary files get separate uploaders.**
 
 ---
 
