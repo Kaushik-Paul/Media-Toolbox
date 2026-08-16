@@ -32,7 +32,7 @@ def _header() -> str:
 
 
 def build_blocks() -> gr.Blocks:
-    # theme/css are applied in gpu/app.py via gr.mount_gradio_app (Gradio 6 API).
+    # theme/css are applied in main/gpu/app.py via gr.mount_gradio_app (Gradio 6 API).
     with gr.Blocks(title="Media AI Toolbox") as blocks:
         gr.HTML(_header())
         gr.HTML(QUOTA_BANNER)

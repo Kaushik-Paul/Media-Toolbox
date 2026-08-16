@@ -1,10 +1,10 @@
 """Media AI Toolbox (GPU Space) entrypoint.
 
-Selected by the root README frontmatter (`app_file: gpu/app.py`) when deploying
+Selected by the root README frontmatter (`app_file: main/gpu/app.py`) when deploying
 the ZeroGPU Gradio Space. FastAPI is the top-level server (health + expiry-
 checked job/download routes); the Gradio UI is mounted at '/'.
 
-The shared core from ``main/`` (config, models, manifests, bucket storage,
+The shared code beside ``gpu/`` (config, models, manifests, bucket storage,
 FFprobe/FFmpeg helpers) is reused by putting ``main/`` on ``sys.path``.
 """
 from __future__ import annotations
@@ -15,8 +15,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-MAIN_DIR = REPO_ROOT / "main"
+MAIN_DIR = Path(__file__).resolve().parents[1]
+REPO_ROOT = MAIN_DIR.parent
 for _path in (str(REPO_ROOT), str(MAIN_DIR)):
     if _path not in sys.path:
         sys.path.insert(0, _path)
