@@ -1,4 +1,2 @@
-# System packages for the GPU Gradio Space (installed by the Gradio SDK builder).
-# FFmpeg is used for CPU-side pre/postprocessing; libsndfile for audio I/O.
 ffmpeg
 libsndfile1

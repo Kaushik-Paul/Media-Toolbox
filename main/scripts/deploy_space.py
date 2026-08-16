@@ -152,6 +152,22 @@ def stage_deployment(files: list[DeploymentFile], stage_root: Path) -> None:
         shutil.copy2(source, destination)
 
 
+def validate_gpu_packages() -> None:
+    """Ensure packages.gpu.txt is safe for HF's xargs-based apt installer."""
+    for line_number, raw in enumerate(
+        (PROJECT_ROOT / GPU_PACKAGES).read_text(encoding="utf-8").splitlines(),
+        start=1,
+    ):
+        package = raw.strip()
+        if not package:
+            continue
+        if package.startswith("#") or any(char.isspace() for char in package):
+            raise SystemExit(
+                f"{GPU_PACKAGES}:{line_number} must contain one Debian package "
+                "name and no comments; Hugging Face passes every token to apt-get."
+            )
+
+
 def read_space_metadata() -> dict:
     """Read and validate the root README's Hugging Face Space frontmatter."""
     if not README_PATH.exists():
@@ -180,6 +196,7 @@ def read_space_metadata() -> dict:
                 raise SystemExit(
                     f"README.md selects Gradio, but {required} is missing."
                 )
+        validate_gpu_packages()
         app_file = str(metadata.get("app_file", "app.py")).strip()
         app_path = Path(app_file)
         if not app_file or app_path.is_absolute() or ".." in app_path.parts:
@@ -220,8 +237,6 @@ def parse_args() -> argparse.Namespace:
             "Gradio. Pass a different flavor to override it."
         ),
     )
-    parser.add_argument("--public", action="store_true",
-                        help="Create the Space as public (default: private).")
     parser.add_argument("--create-bucket", action="store_true",
                         help="Create the shared private Storage Bucket and attach it to this Space.")
     parser.add_argument(
@@ -277,14 +292,15 @@ def main() -> None:
         repo_type="space",
         space_sdk=sdk,
         exist_ok=True,
-        private=not args.public,
+        private=False,
         space_hardware=hardware,
     )
-    # create_repo(exist_ok=True) does not change an existing repo's visibility.
+    # create_repo(exist_ok=True) does not change an existing repo's visibility,
+    # so explicitly keep both application Spaces public on every deployment.
     api.update_repo_settings(
         repo_id=space_id,
         repo_type="space",
-        private=not args.public,
+        private=False,
     )
     with tempfile.TemporaryDirectory(prefix="media-toolbox-deploy-") as tmp:
         stage_root = Path(tmp)
