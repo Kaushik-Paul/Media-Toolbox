@@ -21,6 +21,15 @@ for _path in (str(REPO_ROOT), str(MAIN_DIR)):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
+# Local dev keeps secrets in a .env at the repo root; on Hugging Face they
+# come from Space secrets, so a missing file or package is fine.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(REPO_ROOT / ".env")
+except ImportError:
+    pass
+
 # Gradio upload temp files live inside the work dir so lifecycle is owned by us.
 os.environ.setdefault(
     "GRADIO_TEMP_DIR",
@@ -125,13 +134,22 @@ def delete_job(prefix: str) -> dict:
 import gradio as gr
 
 from gpu.ui.app import build_blocks
-from ui.theme import CSS, FORCE_DARK_JS, THEME  # shared visual identity from the CPU Space
+from ui.theme import CSS, FORCE_DARK_JS, THEME, ForceDarkThemeMiddleware  # shared visual identity from the CPU Space
 
 blocks = build_blocks()
 
 # Only the ephemeral work dir is exposed to Gradio's file serving. Bucket
 # files are served exclusively through the expiry-checked routes above.
 _allowed = [str(services.settings.work_dir)]
+
+# Gradio's built-in login page gates the whole UI when credentials are set.
+_auth = None
+if services.gpu_settings.toolbox_username and services.gpu_settings.toolbox_password:
+    _auth = (services.gpu_settings.toolbox_username, services.gpu_settings.toolbox_password)
+else:
+    logging.getLogger(__name__).warning(
+        "TOOLBOX_USERNAME/TOOLBOX_PASSWORD not set; UI login is disabled"
+    )
 
 app = gr.mount_gradio_app(
     app,
@@ -140,6 +158,7 @@ app = gr.mount_gradio_app(
     theme=THEME,
     css=CSS,
     js=FORCE_DARK_JS,
+    auth=_auth,
     allowed_paths=_allowed,
     max_file_size=f"{int(services.settings.max_input_size_gb)}gb",
     # The Gradio SDK enables SSR on Hugging Face. With mount_gradio_app(),
@@ -147,6 +166,46 @@ app = gr.mount_gradio_app(
     # Client-side rendering keeps FastAPI/Uvicorn as the single HTTP server.
     ssr_mode=False,
 )
+
+# Gradio issues its auth token as a session cookie, so the login is lost when
+# the browser closes. Extend those cookies to 30 days so users stay signed in.
+SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
+
+
+class _PersistAuthCookieMiddleware:
+    """Append Max-Age to Gradio's access-token cookies set by POST /login."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_wrapper(message):
+            if (
+                message["type"] == "http.response.start"
+                and scope.get("path", "").rstrip("/") == "/login"
+            ):
+                headers = []
+                for name, value in message.get("headers", []):
+                    if (
+                        name.lower() == b"set-cookie"
+                        and b"access-token-" in value
+                        and b"max-age" not in value.lower()
+                    ):
+                        value += f"; Max-Age={SESSION_MAX_AGE_SECONDS}".encode()
+                    headers.append((name, value))
+                message["headers"] = headers
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+
+if _auth is not None:
+    app.add_middleware(_PersistAuthCookieMiddleware)
+app.add_middleware(ForceDarkThemeMiddleware)
 
 # ZeroGPU normally discovers decorated functions when Blocks.launch() runs.
 # This app mounts Gradio under FastAPI, so explicitly execute the equivalent
