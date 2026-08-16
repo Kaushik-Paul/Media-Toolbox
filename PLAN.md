@@ -13,7 +13,7 @@ media-toolbox-gpu
     ↓
 AI/GPU media operations
 
-media-toolbox-temp
+media-toolbox
     ↓
 Shared private HF Storage Bucket
 
@@ -65,7 +65,7 @@ Build two completely separate HF Spaces sharing one storage bucket.
                             ▼
                  ┌─────────────────────┐
                  │ PRIVATE HF BUCKET   │
-                 │ media-toolbox-temp  │
+                  │ media-toolbox      │
                  │                     │
                  │ jobs/...            │
                  └──────────┬──────────┘
@@ -84,7 +84,96 @@ CPU FFmpeg and GPU AI processing should therefore remain separate.
 
 # 3. Source repository structure
 
-Develop everything initially as one monorepo:
+Develop everything initially as one monorepo.
+
+**Implemented layout** (the repo root IS the deployable Docker Space: root
+`Dockerfile` builds from `main/`, root `README.md` carries the Space
+frontmatter; infra files live at the root, all application code under
+`main/`):
+
+```text
+media-toolbox/
+│
+├── README.md            # root README; carries HF Space YAML frontmatter
+├── .gitignore
+├── .dockerignore
+├── Dockerfile           # root; builds the app from main/
+├── PLAN.md
+├── AGENTS.md
+├── LICENSE
+│
+└── main/                # CPU Space application
+    ├── app.py           # entrypoint: FastAPI + Gradio mounted at "/"
+    ├── requirements.txt
+    │
+    ├── core/            # shared across both Spaces (reused by the GPU Space)
+    │   ├── config.py
+    │   ├── models.py
+    │   ├── filenames.py
+    │   ├── time_utils.py
+    │   ├── media_types.py
+    │   ├── manifests.py
+    │   └── storage/
+    │       ├── bucket.py
+    │       └── retention.py
+    │
+    ├── backend/
+    │   ├── probe.py
+    │   ├── capabilities.py
+    │   ├── command_builder.py
+    │   ├── ffmpeg_runner.py
+    │   ├── job_manager.py
+    │   ├── download.py
+    │   ├── security.py
+    │   └── services.py
+    │
+    ├── operations/      # one module per operation; registry in __init__.py
+    │   ├── base.py
+    │   ├── compress.py
+    │   ├── target_size.py
+    │   ├── resize.py
+    │   ├── audio.py
+    │   ├── convert.py
+    │   ├── trim.py
+    │   ├── fps.py
+    │   ├── crop.py
+    │   ├── rotate.py
+    │   ├── speed.py
+    │   ├── subtitles.py
+    │   ├── merge.py
+    │   ├── concatenate.py
+    │   ├── gif.py
+    │   ├── screenshot.py
+    │   ├── metadata.py
+    │   ├── compatibility.py
+    │   └── advanced.py
+    │
+    ├── ui/
+    │   ├── app.py
+    │   ├── theme.py
+    │   ├── components.py
+    │   ├── tools.py
+    │   └── history.py
+    │
+    ├── cleanup/
+    │   └── cleanup.py
+    │
+    └── scripts/
+        └── deploy_space.py   # deploys repo root as the Docker Space (Python,
+                              # replaces deploy_cpu.sh / create_bucket.sh)
+```
+
+Deviations from the original plan below, kept deliberately:
+
+- The GPU Space application will live in a sibling directory (e.g. `ai-main/`)
+  added later, reusing `main/core/` (manifest, storage, time utils) via the
+  same schema and bucket conventions.
+- Deployment is one Python script (`main/scripts/deploy_space.py`, using
+  `huggingface_hub`) instead of per-purpose shell scripts.
+- No `Makefile` / `pyproject.toml`; a single `main/requirements.txt`.
+- No test files in the repository (see §66).
+
+The original sketch, for reference:
 
 ```text
 media-toolbox/
@@ -211,7 +300,7 @@ Space 2:
 <username>/media-toolbox-gpu
 
 Bucket:
-<username>/media-toolbox-temp
+<username>/media-toolbox
 ```
 
 Make all three **private** by default because media files may contain personal content.
@@ -2114,7 +2203,7 @@ Never commit credentials.
 Configuration:
 
 ```text
-HF_BUCKET_ID=<username>/media-toolbox-temp
+HF_BUCKET_ID=<username>/media-toolbox
 
 RETENTION_HOURS=24
 MAX_CONCURRENT_CPU_JOBS=1
@@ -2198,6 +2287,14 @@ Never log tokens.
 ---
 
 # 66. Testing strategy
+
+> **Deviation (deliberate):** this repository is kept **without test files**
+> at the user's request. Verification is manual instead: `python -m compileall`,
+> booting the app, driving operations with synthetic FFmpeg lavfi media
+> (`testsrc2`, `sine`) through the JobManager/API, and running
+> `cleanup/cleanup.py --dry-run` twice (idempotency). See the verification
+> checklist in `AGENTS.md`. The unit-test list below is retained as a review
+> checklist for those manual verifications.
 
 The AI agent must write tests alongside implementation.
 
