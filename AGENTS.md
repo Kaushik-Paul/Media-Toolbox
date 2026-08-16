@@ -10,7 +10,7 @@ A personal media-processing system hosted on Hugging Face Spaces, built per
 - **CPU Space** (`media-toolbox-cpu`, Docker SDK): general FFmpeg operations.
   Lives in `main/`. **This is built and working.**
 - **GPU Space** (`media-toolbox-gpu`, Gradio SDK + ZeroGPU): Whisper, Demucs,
-  Real-ESRGAN. **Not built yet** — will be a separate effort; it must reuse the
+  Real-ESRGAN. Lives in `gpu/`. **This is built and working.** It reuses the
   same manifest schema, bucket layout, and job-prefix convention.
 - Shared private HF Storage Bucket (`media-toolbox`) mounted at
   `/data/media-bucket` holds outputs for 24 hours.
@@ -20,7 +20,9 @@ A personal media-processing system hosted on Hugging Face Spaces, built per
 ```text
 README.md            # single README, includes HF Space YAML frontmatter
 PLAN.md              # full build specification
-Dockerfile           # at repo ROOT: builds the app from main/ (Space builds here)
+Dockerfile           # at repo ROOT: builds the app from main/ (CPU Space builds here)
+requirements.txt     # at repo ROOT: GPU Space deps (Gradio Spaces install from root)
+packages.txt         # at repo ROOT: apt packages for the GPU Space (ffmpeg, libsndfile1)
 .dockerignore
 main/                # the CPU Space application code
   app.py             # entrypoint: FastAPI + Gradio mounted at "/"
@@ -33,6 +35,12 @@ main/                # the CPU Space application code
   operations/        # one module per operation; registry in __init__.py
   ui/                # Gradio Blocks: app, theme, components, tools, history
   cleanup/cleanup.py # hourly expiry cleanup job (--dry-run, idempotent)
+gpu/                 # the GPU Space application code (ZeroGPU)
+  app.py             # entrypoint: FastAPI + Gradio; sys.path adds main/ for shared code
+  backend/           # config (GpuSettings + @gpu decorator), job_manager,
+                     # preprocessing, postprocessing, services
+  models/            # whisper.py, demucs.py, realesrgan.py (lazy heavy imports)
+  ui/                # common (OpUI), transcription, stems, upscale, history, app
 ```
 
 No tests directory — the user asked to keep the repo without tests. Verify
@@ -85,6 +93,26 @@ Useful overrides: `WORK_DIR=/tmp/mt BUCKET_MOUNT=/tmp/mt-bucket`.
 - Logging: structured, includes `job_id`/`operation`/`stage`; never log media
   contents or tokens.
 
+## GPU Space conventions (gpu/)
+
+- Reuses `main/core/*`, `main/backend/probe.py`, `main/backend/ffmpeg_runner.py`,
+  and `main/ui/theme.py` via sys.path insertion in `gpu/app.py` — never copy
+  them into `gpu/`.
+- GPU work happens only inside `@gpu(duration=...)` functions
+  (`gpu/backend/config.py` wraps `spaces.GPU`, no-op off ZeroGPU). Dynamic
+  duration callables must take the same arguments as the decorated function.
+- ZeroGPU runs each GPU function in a throwaway fork: load models in the MAIN
+  process (`_get_pipeline()` / `_get_model()` called from `run()` before the
+  GPU call) so forks inherit them. A model loaded inside the GPU function is
+  reloaded on every call.
+- torch/transformers/demucs imports stay lazy (inside functions) so the app
+  boots with models disabled or deps missing (PLAN.md rule 20).
+- Downloads/previews go through the FastAPI expiry-checked routes, never
+  `allowed_paths` on the bucket.
+- No `gpu/README.md`, no GPU Dockerfile: the root README frontmatter is
+  switched to the gradio block for GPU deploys; root `requirements.txt` /
+  `packages.txt` belong to the GPU Space.
+
 ## Gradio 6 gotchas (this repo uses gradio>=6)
 
 - `theme`/`css` are **not** `gr.Blocks()` constructor args anymore — they are
@@ -97,9 +125,11 @@ Useful overrides: `WORK_DIR=/tmp/mt BUCKET_MOUNT=/tmp/mt-bucket`.
 
 ## Verification checklist after changes
 
-1. `python -m compileall app.py core backend operations ui cleanup` (from `main/`)
+1. `python -m compileall app.py core backend operations ui cleanup` (from
+   `main/`); for GPU changes, `python -m compileall gpu` from the repo root.
 2. Boot: `cd main && ../.venv/bin/python app.py`, check startup diagnostics log
-   (encoders detected, bucket connected).
+   (encoders detected, bucket connected). For the GPU Space:
+   `.venv/bin/python gpu/app.py` from the repo root.
 3. Generate synthetic media with FFmpeg lavfi (`testsrc2`, `sine`) and run the
    affected operation through `backend.services.init_services().jobs.submit(...)`.
 4. Exercise the API: `/_health`, `/api/jobs`, download, delete.
