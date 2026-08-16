@@ -125,7 +125,7 @@ def delete_job(prefix: str) -> dict:
 import gradio as gr
 
 from gpu.ui.app import build_blocks
-from ui.theme import CSS, THEME  # shared visual identity from the CPU Space
+from ui.theme import CSS, FORCE_DARK_JS, THEME  # shared visual identity from the CPU Space
 
 blocks = build_blocks()
 
@@ -139,6 +139,7 @@ app = gr.mount_gradio_app(
     path="/",
     theme=THEME,
     css=CSS,
+    js=FORCE_DARK_JS,
     allowed_paths=_allowed,
     max_file_size=f"{int(services.settings.max_input_size_gb)}gb",
     # The Gradio SDK enables SSR on Hugging Face. With mount_gradio_app(),
