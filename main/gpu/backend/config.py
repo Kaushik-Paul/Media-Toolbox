@@ -51,6 +51,11 @@ class GpuSettings:
     # Optional link shown in the header back to the CPU Space.
     cpu_space_url: str = ""
 
+    # Login credentials gating the Gradio UI. When both are set, visitors must
+    # sign in before the toolbox is shown; when unset, auth is disabled.
+    toolbox_username: str = ""
+    toolbox_password: str = ""
+
     # Model weight caches default under the (ephemeral) work dir.
     model_cache_dir: Path = Path("/tmp/media-toolbox/models")
 
@@ -66,6 +71,8 @@ class GpuSettings:
             gpu_video_max_pixels=_env_int("GPU_VIDEO_MAX_PIXELS", 1920 * 1080),
             gpu_video_max_file_size_gb=_env_float("GPU_VIDEO_MAX_FILE_SIZE_GB", 1.0),
             cpu_space_url=_env_str("CPU_SPACE_URL", ""),
+            toolbox_username=_env_str("TOOLBOX_USERNAME", ""),
+            toolbox_password=_env_str("TOOLBOX_PASSWORD", ""),
             model_cache_dir=Path(_env_str("MODEL_CACHE_DIR", str(work_dir / "models"))),
         )
 

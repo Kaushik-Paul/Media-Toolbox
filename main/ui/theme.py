@@ -1,6 +1,8 @@
 """Visual identity shared by the CPU Space (and later the GPU Space)."""
 from __future__ import annotations
 
+from urllib.parse import parse_qsl, urlencode
+
 import gradio as gr
 
 THEME = gr.themes.Soft(
@@ -74,14 +76,50 @@ CSS = """
 """
 
 # Gradio follows the visitor's system/browser theme unless the URL carries
-# ?__theme=dark. This snippet (the workaround recommended by the Gradio
-# maintainers) redirects once to the dark-theme URL so the UI is always dark.
+# ?__theme=dark. Gradio 6 injects this snippet verbatim as a <script> body,
+# so it must be an IIFE: a bare function expression would never be called.
 FORCE_DARK_JS = """
-() => {
+(() => {
     const url = new URL(window.location.href);
     if (url.searchParams.get("__theme") !== "dark") {
         url.searchParams.set("__theme", "dark");
         window.location.replace(url.toString());
     }
-}
+})();
 """
+
+
+class ForceDarkThemeMiddleware:
+    """Redirect Gradio page loads to ?__theme=dark.
+
+    Server-side (unlike FORCE_DARK_JS) so it also covers the login page,
+    whose config does not include custom js.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if (
+            scope["type"] == "http"
+            and scope.get("method") in ("GET", "HEAD")
+            and scope.get("path", "").rstrip("/") == ""
+        ):
+            params = parse_qsl(
+                scope.get("query_string", b"").decode(), keep_blank_values=True
+            )
+            if ("__theme", "dark") not in params:
+                params = [(k, v) for k, v in params if k != "__theme"]
+                params.append(("__theme", "dark"))
+                location = "/?" + urlencode(params)
+                await send({
+                    "type": "http.response.start",
+                    "status": 302,
+                    "headers": [
+                        (b"location", location.encode()),
+                        (b"content-length", b"0"),
+                    ],
+                })
+                await send({"type": "http.response.body", "body": b""})
+                return
+        await self.app(scope, receive, send)

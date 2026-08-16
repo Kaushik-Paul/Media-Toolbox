@@ -10,6 +10,7 @@ transformers>=4.46
 accelerate>=0.34
 gradio>=6.0
 spaces
+python-dotenv>=1.0  # local dev only; HF Spaces inject secrets as env vars
 huggingface_hub>=1.8.0
 pydantic>=2.6
 

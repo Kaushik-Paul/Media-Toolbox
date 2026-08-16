@@ -35,7 +35,7 @@ from ui.app import build_blocks
 
 blocks = build_blocks()
 
-from ui.theme import CSS, FORCE_DARK_JS, THEME
+from ui.theme import CSS, FORCE_DARK_JS, THEME, ForceDarkThemeMiddleware
 
 # Allow Gradio to serve result files directly from the bucket mount for
 # previews and in-UI downloads.
@@ -51,6 +51,8 @@ app = gr.mount_gradio_app(
     allowed_paths=_allowed,
     max_file_size=f"{int(services.settings.max_input_size_gb)}gb",
 )
+
+app.add_middleware(ForceDarkThemeMiddleware)
 
 
 if __name__ == "__main__":
