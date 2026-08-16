@@ -12,9 +12,11 @@ private: true
 
 Personal media-processing system for Hugging Face Spaces, built per `PLAN.md`.
 
-The CPU Space (`media-toolbox-cpu`) lives in **`main/`**: FastAPI + Gradio +
-FFmpeg. A GPU Space (`media-toolbox-gpu`, ZeroGPU: Whisper / Demucs /
-Real-ESRGAN) is planned next and will share the same private HF Storage Bucket.
+The CPU Space (`media-toolbox-cpu`) application code lives in **`main/`**
+(FastAPI + Gradio + FFmpeg); the `Dockerfile` at the repo root builds it, so
+the repository root can be deployed directly as the Docker Space. A GPU Space
+(`media-toolbox-gpu`, ZeroGPU: Whisper / Demucs / Real-ESRGAN) is planned next
+and will share the same private HF Storage Bucket.
 
 > The YAML frontmatter above is the Hugging Face Space configuration; copy this
 > README (or the frontmatter block) into the Space repository root when
@@ -80,12 +82,21 @@ Without a bucket mounted at `/data/media-bucket`, a local dev bucket under
 
 ## Deployment
 
-1. Create the private Space `<user>/media-toolbox-cpu` (Docker SDK) and push
-   the contents of `main/` plus this README's frontmatter.
-2. Create the private Storage Bucket `<user>/media-toolbox-temp` and attach it
-   to the Space at `/data/media-bucket` (read/write).
-3. Schedule an `@hourly` HF Job running
-   `python cleanup/cleanup.py --bucket /data/media-bucket`.
+```bash
+# preview the upload set
+python main/scripts/deploy_space.py --dry-run
+
+# deploy (uses `hf auth login` token or HF_TOKEN)
+python main/scripts/deploy_space.py --repo-id <user>/media-toolbox-cpu --create-bucket
+```
+
+The script uploads the git-visible repo contents to the Docker Space and
+optionally creates the private Storage Bucket. Then, once, in the Space
+settings UI:
+
+1. Attach the bucket at `/data/media-bucket` (read/write).
+2. Schedule an `@hourly` HF Job running
+   `python main/cleanup/cleanup.py --bucket /data/media-bucket`.
 
 ## Security model
 

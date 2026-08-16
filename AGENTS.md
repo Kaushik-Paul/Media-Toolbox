@@ -20,10 +20,12 @@ A personal media-processing system hosted on Hugging Face Spaces, built per
 ```text
 README.md            # single README, includes HF Space YAML frontmatter
 PLAN.md              # full build specification
-main/                # the CPU Space (deploy this folder's contents)
+Dockerfile           # at repo ROOT: builds the app from main/ (Space builds here)
+.dockerignore
+main/                # the CPU Space application code
   app.py             # entrypoint: FastAPI + Gradio mounted at "/"
   requirements.txt
-  Dockerfile         # python:3.12-slim, ffmpeg, UID 1000, port 7860
+  scripts/deploy_space.py  # deploys the repo root as the Docker Space
   core/              # config, models, filenames, time_utils, media_types,
                      # manifests, storage/ (bucket + retention)
   backend/           # probe, capabilities, command_builder, ffmpeg_runner,
@@ -106,8 +108,11 @@ Useful overrides: `WORK_DIR=/tmp/mt BUCKET_MOUNT=/tmp/mt-bucket`.
 
 ## Deployment
 
-- Push `main/` contents + the root README frontmatter to the
-  `media-toolbox-cpu` Space repo (Docker SDK, `app_port: 7860`).
+- Use `main/scripts/deploy_space.py` (modeled on the Manga-Translator-OCR
+  helper): uploads git-visible repo-root files to the Docker Space repo (the
+  root Dockerfile builds from `main/`; the root README carries the
+  frontmatter). `--dry-run` previews, `--create-bucket` provisions the shared
+  bucket. Auth via `hf auth login` or `HF_TOKEN`.
 - Attach private bucket at `/data/media-bucket` (read/write).
-- Schedule `python cleanup/cleanup.py --bucket /data/media-bucket` as an
+- Schedule `python main/cleanup/cleanup.py --bucket /data/media-bucket` as an
   `@hourly` HF Job.

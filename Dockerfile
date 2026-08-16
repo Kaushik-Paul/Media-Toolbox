@@ -21,10 +21,10 @@ ENV HOME=/home/user \
 
 WORKDIR /home/user/app
 
-COPY --chown=user:user requirements.txt .
+COPY --chown=user:user main/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir --user -r requirements.txt
 
-COPY --chown=user:user . .
+COPY --chown=user:user main/ ./
 
 ENV WORK_DIR=/tmp/media-toolbox \
     BUCKET_MOUNT=/data/media-bucket \
