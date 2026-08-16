@@ -4,8 +4,8 @@ Guidance for AI agents working in this repository.
 
 ## What this is
 
-A personal media-processing system hosted on Hugging Face Spaces, built per
-`PLAN.md` (the authoritative spec — read it before large changes).
+A personal media-processing system hosted on Hugging Face Spaces.
+Hosted at **https://www.mediatoolbox.pp.ua/**.
 
 - **CPU Space** (`media-toolbox-cpu`, Docker SDK): general FFmpeg operations.
   Lives in `main/`. **This is built and working.**
@@ -18,8 +18,8 @@ A personal media-processing system hosted on Hugging Face Spaces, built per
 ## Repository layout
 
 ```text
-README.md            # single README, includes HF Space YAML frontmatter
-PLAN.md              # full build specification
+README.md            # single README (no Space frontmatter committed)
+gradio_sdk.txt       # stash of both ready-to-paste frontmatter blocks (CPU/GPU)
 Dockerfile.cpu       # CPU Docker source; deployed as root Dockerfile
 requirements.cpu.txt # CPU Python dependencies
 requirements.gpu.txt # GPU deps; deployed as root requirements.txt
@@ -56,7 +56,7 @@ cd main && python app.py                             # http://127.0.0.1:7860
 Without a mounted bucket, a dev bucket is created at `$WORK_DIR/bucket`.
 Useful overrides: `WORK_DIR=/tmp/mt BUCKET_MOUNT=/tmp/mt-bucket`.
 
-## Hard rules (from PLAN.md §82 — non-negotiable)
+## Hard rules (non-negotiable)
 
 1. Never `shell=True`, never `os.system`. FFmpeg commands are argument arrays
    built with `backend/command_builder.FFmpegCommandBuilder`.
@@ -105,7 +105,7 @@ Useful overrides: `WORK_DIR=/tmp/mt BUCKET_MOUNT=/tmp/mt-bucket`.
   GPU call) so forks inherit them. A model loaded inside the GPU function is
   reloaded on every call.
 - torch/transformers/demucs imports stay lazy (inside functions) so the app
-  boots with models disabled or deps missing (PLAN.md rule 20).
+  boots with models disabled or deps missing.
 - Downloads/previews go through the FastAPI expiry-checked routes, never
   `allowed_paths` on the bucket.
 - No `main/gpu/README.md`, no GPU Dockerfile: the root README frontmatter is
@@ -137,11 +137,20 @@ Useful overrides: `WORK_DIR=/tmp/mt BUCKET_MOUNT=/tmp/mt-bucket`.
 
 ## Deployment
 
-- Use `main/scripts/deploy_space.py` (modeled on the Manga-Translator-OCR
-  helper): it stages the selected SDK package from git-visible files. CPU maps
-  `Dockerfile.cpu`; GPU maps `requirements.gpu.txt` and `packages.gpu.txt`.
-  `--dry-run` previews, `--create-bucket` provisions the shared bucket. Auth
-  via `hf auth login` or `HF_TOKEN`.
+- The committed README carries no Space frontmatter: `deploy_space.py` reads
+  `sdk:` from it and exits if missing. Before deploying, paste the matching
+  block from `gradio_sdk.txt` at the top of README.md, deploy, then remove it.
+- Use `main/scripts/deploy_space.py`: it stages the selected SDK package from
+  git-visible files. CPU maps `Dockerfile.cpu` → root `Dockerfile`; GPU maps
+  `requirements.gpu.txt` / `packages.gpu.txt` → root `requirements.txt` /
+  `packages.txt` and excludes `main/gpu/` from CPU deploys. Each deploy makes
+  the remote Space an exact mirror of the staged package and keeps the Space
+  public.
+  - `--dry-run` previews; `--create-bucket` provisions the shared private
+    bucket and attaches it; `--attach-bucket` attaches an existing one.
+  - Hardware defaults: `cpu-basic` (docker), `zero-a10g` (gradio).
+  - Auth via `hf auth login` or `HF_TOKEN`.
 - Attach private bucket at `/data/media-bucket` (read/write).
 - Schedule `python main/cleanup/cleanup.py --bucket /data/media-bucket` as an
-  `@hourly` HF Job.
+  `@hourly` HF Job — exactly one, mounting the CPU Space read-only for the
+  script and the bucket read/write.
