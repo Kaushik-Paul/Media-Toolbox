@@ -1,249 +1,388 @@
-# Media Toolbox
+<div align="center">
 
-Personal media-processing system hosted on Hugging Face Spaces.
+# 🎬 Media Toolbox
 
-**Live: <https://www.mediatoolbox.pp.ua/>** — both Spaces are also directly
-reachable on Hugging Face (`media-toolbox-cpu` and `media-toolbox-gpu`).
+**A browser-based toolkit for practical video and audio conversion, powered by
+FFmpeg with optional GPU-assisted AI tools.**
 
-Two applications share one repository and one private HF Storage Bucket:
+[![CPU Space](https://img.shields.io/badge/CPU_Space-Open_Toolbox-4f46e5?logo=huggingface&logoColor=white)](https://www.mediatoolbox.pp.ua/)
+[![GPU Space](https://img.shields.io/badge/GPU_Space-AI_Toolbox-059669?logo=huggingface&logoColor=white)](https://gpu.mediatoolbox.pp.ua/)
+[![Python](https://img.shields.io/badge/Python-3.12-3776ab?logo=python&logoColor=white)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-16a34a)](LICENSE)
 
-- **CPU Space** (`media-toolbox-cpu`, Docker SDK) — general FFmpeg operations.
-  Entrypoint: `main/app.py` (FastAPI + Gradio + FFmpeg).
-- **GPU Space** (`media-toolbox-gpu`, Gradio SDK + ZeroGPU) — every CPU
-  FFmpeg tool plus Whisper, Demucs, and Real-ESRGAN. Entrypoint:
-  `main/gpu/app.py`.
+[CPU app](https://www.mediatoolbox.pp.ua/) ·
+[GPU app](https://gpu.mediatoolbox.pp.ua/) ·
+[CPU Space](https://huggingface.co/spaces/kaushikpaul/media-toolbox-cpu) ·
+[GPU Space](https://huggingface.co/spaces/kaushikpaul/media-toolbox-gpu)
 
-Both use the same manifest schema, bucket layout (`jobs/<expires>_<job_id>/`),
-and 24-hour job history.
+</div>
 
-Space infrastructure stays at the repository root: `Dockerfile.cpu`,
-`requirements.cpu.txt`, `requirements.gpu.txt`, and `packages.gpu.txt`.
-`main/scripts/deploy_space.py` stages an SDK-specific package and maps those
-files to the root names the chosen HF builder expects.
+Media Toolbox handles common media jobs without requiring users to remember
+FFmpeg commands. Upload a file once—or fetch it from a supported public URL—and
+reuse it across the available tools. The CPU and GPU applications share the
+same interface, job format, history, and private Hugging Face Storage Bucket.
 
-> **Deploying requires Space frontmatter.** This README intentionally carries
-> none; `main/scripts/deploy_space.py` reads `sdk:` from the YAML frontmatter
-> at the top of the root README and exits without it. Before deploying, paste
-> the matching block from **`gradio_sdk.txt`** (Docker for the CPU Space,
-> Gradio for the GPU Space) above the title, deploy, then remove it again.
+## Choose an app
 
-## Features (CPU Space)
+| App | Best for | Runtime | Access |
+|---|---|---|---|
+| **CPU Toolbox** | Everyday video, audio, subtitle, and container operations | Docker Space on `cpu-basic` | Public |
+| **GPU Toolbox** | Every CPU tool plus transcription, stem separation, and AI upscaling | Gradio Space on ZeroGPU | Password protected when credentials are configured |
 
-- **Video**: compress (H.264/H.265/AV1), target file size (two-pass), resize,
-  container convert (auto remux/transcode), trim (fast/accurate), FPS, rotate,
-  crop (with frame preview), speed, merge video+audio, concatenate, GIF,
-  screenshots, remove audio
-- **Audio**: extract, convert, compress, sample rate, mono/stereo, normalize
-  (simple + EBU R128 two-pass), trim, speed
-- **Subtitles**: extract tracks, add track, burn into video
-- **Utilities**: make browser-compatible, optimize MP4 for streaming, remove
-  metadata, FFprobe media info
-- **Advanced**: validated custom FFmpeg arguments with live command preview
-- **History**: outputs persist in a private HF Storage Bucket for **24 hours**,
-  then download is denied (410); physical bucket objects are removed after 30
-  days by a low-cost daily Google Cloud function
+Each Space accepts only one upload, URL fetch, or conversion at a time. This
+keeps large jobs from exhausting the worker. The activity toolbar shows the
+current state and provides a password-protected force-cancel action.
 
-Video, Audio, and Subtitle sections each have a shared session source above
-their subtools. Upload a local file or securely fetch a public direct, Google
-Drive, OneDrive, or SharePoint URL once, then switch operations without
-uploading it again; Merge, Concatenate, Add Track, and Burn ask only for their
-additional inputs.
+## Available tools
 
-## Features (GPU Space, ZeroGPU)
+### Video
 
-- Every basic Video, Audio, Subtitle, Utility, and Advanced FFmpeg operation
-  from the CPU Space is available in the GPU Space too
-- **AI Transcription** (Whisper large-v3-turbo): transcribe or translate to
-  English, 22 languages + auto-detect, segment or word-level timestamps,
-  outputs TXT + SRT + VTT + JSON
-- **Stem Separation** (Demucs htdemucs): vocals + instrumental or full 4-stem
-  split, WAV/FLAC/MP3 output with optional ZIP
-- **AI Upscaling** (Real-ESRGAN): images (General / Anime models, 2x/4x,
-  PNG/WebP/JPG) and short videos (experimental: chunked frame upscaling with
-  the original audio muxed back)
-- GPU work runs only inside `@spaces.GPU` functions with dynamic durations;
-  FFmpeg pre/post-processing stays on the CPU worker
-- Same 24-hour bucket history as the CPU Space; an optional header link jumps
-  back to it (`CPU_SPACE_URL`)
+| Tool | What it does |
+|---|---|
+| Compress | H.264, H.265, or AV1 compression with practical quality presets |
+| Target Size | Two-pass encoding toward a requested output size |
+| Resize | Change resolution while preserving or controlling aspect ratio |
+| Convert | Remux when possible, transcode when necessary |
+| Trim / Cut | Fast keyframe trim or accurate re-encoded trim |
+| FPS | Change video frame rate |
+| Rotate / Flip | Rotate or mirror video |
+| Crop | Crop with a source-frame preview |
+| Speed | Speed up or slow down video and audio together |
+| Merge A+V | Combine a video stream with a separate audio stream |
+| Concatenate | Join compatible media files |
+| GIF | Create a GIF from a short video segment |
+| Screenshot | Export a frame at a selected timestamp |
+| Remove Audio | Produce a video-only file |
 
-Both Spaces stream uploads into the work filesystem and hard-link uploaded
-inputs into job directories when possible, avoiding a second full-file copy.
-Downloads use 1 MiB sequential chunks and HTTP byte ranges. Server-side URL
-fetches stream directly to disk, enforce the input-size limit, revalidate every
-redirect, and reject local/private/reserved network destinations.
-One global activity gate permits only one upload or conversion at a time. A
-password-protected force-cancel control uses `TOOLBOX_PASSWORD`. Results are
-served by expiry-checked HTTP routes with byte-range support, and the UI has a
-persistent light/dark toggle stored in the browser.
+### Audio, subtitles, and utilities
+
+| Area | Tools |
+|---|---|
+| **Audio** | Extract, convert, compress, change sample rate, mono/stereo conversion, simple or EBU R128 normalization, trim, and speed |
+| **Subtitles** | Extract subtitle tracks, add a subtitle track, or burn subtitles into video |
+| **Utilities** | Make browser-compatible, optimize MP4 for streaming, remove metadata, and inspect media with FFprobe |
+| **Advanced** | Run validated custom FFmpeg arguments while the application controls all input and output paths |
+| **History** | View, download, or manually delete recent results |
+
+Video, Audio, and Subtitles each have a shared source control. Select the media
+once, then switch between tools without uploading or downloading it again.
+Operations such as Merge, Concatenate, Add Track, and Burn request only their
+additional files.
+
+### GPU and AI tools
+
+The GPU Space includes every tool above, followed by:
+
+- **Transcription — Whisper `large-v3-turbo`:** transcription or English
+  translation, automatic language detection, segment or word timestamps, and
+  TXT, SRT, VTT, and JSON outputs.
+- **Stem Separation — Demucs `htdemucs`:** vocals/instrumental or four-stem
+  separation with WAV, FLAC, MP3, and optional ZIP output.
+- **AI Upscaling — Real-ESRGAN:** General and Anime image models, 2×/4×
+  scaling, PNG/WebP/JPG output, and experimental short-video upscaling with the
+  original audio muxed back.
+
+GPU work runs only inside ZeroGPU functions. Media preparation and final
+FFmpeg muxing remain on the CPU worker. ZeroGPU processing consumes the
+visitor's Hugging Face GPU quota.
+
+## Input and download workflow
+
+1. Select a local file or expand **Or fetch from a public URL**.
+2. For URL input, paste a public direct-media, Google Drive, OneDrive, or
+   SharePoint link and select **Fetch URL**.
+3. Wait for FFprobe to validate the source and display its media details.
+4. Choose a tool, configure its options, and start the operation.
+5. Preview or download the result, or retrieve it later from **History**.
+
+Public cloud-drive links must be downloadable without signing in. Server-side
+URL fetching is often the fastest option for large files because the source is
+downloaded directly by the Space rather than uploaded through the browser and
+the Hugging Face edge.
+
+Browser upload and result-download speeds still depend on the user's connection
+and the Hugging Face network path. Downloads support HTTP byte ranges, allowing
+clients to resume interrupted transfers.
+
+## Storage and retention
+
+- Uploaded working files stay in the Space's ephemeral work directory.
+- Completed outputs are FFprobe-verified before being persisted.
+- CPU and GPU results use the shared private bucket layout
+  `jobs/<expires_unix>_<job_id>/`.
+- Results remain downloadable for **24 hours**. Expired routes return
+  `410 Gone`, even if physical cleanup has not run yet.
+- An authenticated Google Cloud function removes physical bucket folders older
+  than **30 days** once per day.
+- Partial, failed, and cancelled outputs are never persisted.
+
+The CPU application is public and its History view is shared. Do not submit
+sensitive media to a publicly accessible deployment. The GPU UI can be gated
+with `TOOLBOX_USERNAME` and `TOOLBOX_PASSWORD`.
+
+## Security model
+
+- Every input is checked by FFprobe before processing, and every output is
+  checked before persistence.
+- Remote downloads accept only HTTP(S), ports 80/443, and globally routable
+  destinations. Embedded credentials and local, private, reserved, or unsafe
+  redirect targets are rejected.
+- Remote responses are streamed to a temporary `.part` file with size and disk
+  limits. HTML, text, JSON, XML, and invalid media are rejected.
+- FFmpeg commands are argument arrays; the application never uses
+  `shell=True` or `os.system`.
+- Advanced mode accepts validated FFmpeg arguments only. Extra inputs, network
+  protocols, pipes, and path escapes are blocked.
+- Credentials and tokens are supplied through environment variables, Space
+  secrets, or Google Secret Manager—never source code.
+- GPU login uses a signed 30-day secure cookie that works in both the direct
+  domain and Hugging Face App frame.
 
 ## Architecture
 
-- FastAPI server with the Gradio UI mounted at `/`
-- FFmpeg/FFprobe via argument arrays only (never `shell=True`)
-- Outputs are verified with FFprobe, then moved into the mounted bucket at
-  `/data/media-bucket` under `jobs/<expires_unix>_<job_id>/`
-- `main/cloud_cleanup/main.py` runs once daily as an authenticated Cloud Run
-  function and deletes bucket job folders older than 30 days through the HF
-  server-side API; media bytes never pass through Google
-- `main/cleanup/cleanup.py` remains an idempotent local/mounted-bucket cleanup
-  utility with `--dry-run`
+```text
+Browser / public media URL
+            |
+            v
+    FastAPI + Gradio UI
+            |
+            v
+  Per-Space activity gate (1)
+            |
+            v
+      FFprobe validation
+            |
+            v
+ FFmpeg operation / ZeroGPU model
+            |
+            v
+   FFprobe output verification
+            |
+            v
+ Private HF Storage Bucket
+            |
+            v
+ Expiry-checked range downloads
+```
 
-## API
+The CPU application is served by FastAPI with Gradio mounted at `/`. The GPU
+application reuses the shared configuration, FFprobe, FFmpeg runner, operation
+modules, themes, and storage format rather than maintaining copies.
 
-- `GET /_health` — ffmpeg/ffprobe/bucket status
-- `GET /api/capabilities` — detected encoders/filters
-- `GET /api/jobs` — non-expired job manifests
-- `GET /api/jobs/{prefix}` — single manifest
-- `GET /api/jobs/{prefix}/download/{file_id}` — download (410 once expired)
-- `POST /api/jobs/{prefix}/delete` / `DELETE /api/jobs/{prefix}` — delete now
+### Repository layout
 
-## Configuration (Space secrets / env vars)
+```text
+README.md                   Project guide; no Space frontmatter is committed
+gradio_sdk.txt              CPU and GPU Space frontmatter templates
+Dockerfile.cpu              CPU Docker image source
+requirements.cpu.txt        CPU Python dependencies
+requirements.gpu.txt        GPU Python dependencies
+packages.gpu.txt            GPU system packages
+main/
+  app.py                    CPU FastAPI + Gradio entrypoint
+  backend/                  Probing, command building, jobs, and HTTP routes
+  core/                     Configuration, activity gate, models, URL fetching
+  operations/               Shared FFmpeg operation implementations
+  ui/                       Shared CPU UI, styling, and shell controls
+  gpu/                      ZeroGPU app, models, job manager, and AI tool UI
+  cloud_cleanup/            Google Cloud bucket-cleanup function
+  cleanup/cleanup.py        Manual mounted-bucket cleanup utility
+  scripts/
+    deploy_space.py         CPU/GPU Space packaging and deployment
+    deploy_cleanup_function.sh
+                            Cloud function and scheduler deployment
+```
 
-Shared:
+## HTTP API
+
+| Method and route | Purpose |
+|---|---|
+| `GET /_health` | FFmpeg, FFprobe, and bucket health |
+| `GET /api/capabilities` | Detected encoders and filters |
+| `GET /api/jobs` | Non-expired job manifests |
+| `GET /api/jobs/{prefix}` | One job manifest |
+| `GET /api/jobs/{prefix}/download/{file_id}` | Expiry-checked, byte-range download |
+| `POST /api/jobs/{prefix}/delete` | Delete a job immediately |
+| `DELETE /api/jobs/{prefix}` | Delete a job immediately |
+
+## Configuration
+
+### Shared Space variables
 
 | Variable | Default | Purpose |
-|---|---|---|
-| `BUCKET_MOUNT` | `/data/media-bucket` | Mounted HF Storage Bucket path |
-| `HF_BUCKET_ID` | _(empty)_ | Bucket id, e.g. `user/media-toolbox` (informational) |
-| `RETENTION_HOURS` | `24` | Output retention |
-| `WORK_DIR` | `/tmp/media-toolbox` | Ephemeral processing directory |
-| `MAX_CONCURRENT_CPU_JOBS` | `1` | Worker safety limit; the global gate rejects concurrent work |
-| `MIN_FREE_DISK_GB` | `2.0` | Refuse jobs below this free space |
-| `MAX_INPUT_SIZE_GB` | `8.0` | Upload size limit |
-| `PORT` | `7860` | HTTP port |
-| `TOOLBOX_PASSWORD` | _(empty)_ | Force-cancel password; set the same secret on both Spaces |
+|---|---:|---|
+| `BUCKET_MOUNT` | `/data/media-bucket` | Mounted Hugging Face Storage Bucket path |
+| `HF_BUCKET_ID` | Empty | Bucket identifier such as `user/media-toolbox` |
+| `RETENTION_HOURS` | `24` | Logical output lifetime |
+| `WORK_DIR` | `/tmp/media-toolbox` | Ephemeral upload and processing directory |
+| `MAX_CONCURRENT_CPU_JOBS` | `1` | Worker concurrency limit |
+| `MIN_FREE_DISK_GB` | `2.0` | Minimum free space required before a job starts |
+| `MAX_INPUT_SIZE_GB` | `8.0` | Maximum local or remote input size |
+| `FFMPEG_PATH` | `ffmpeg` | FFmpeg executable |
+| `FFPROBE_PATH` | `ffprobe` | FFprobe executable |
+| `PORT` | `7860` | HTTP server port |
+| `TOOLBOX_PASSWORD` | Empty | Force-cancel password; also the GPU login password |
 
-GPU Space only:
+Additional tuning options are defined in
+[`main/core/config.py`](main/core/config.py).
+
+### GPU Space variables
 
 | Variable | Default | Purpose |
-|---|---|---|
+|---|---:|---|
+| `TOOLBOX_USERNAME` | Empty | Login username; authentication is disabled unless both credentials are set |
+| `TOOLBOX_PASSWORD` | Empty | Login and force-cancel password |
 | `WHISPER_MODEL` | `openai/whisper-large-v3-turbo` | Transcription model |
-| `DEMUCS_MODEL` | `htdemucs` | Stem separation model |
-| `ENABLE_DEMUCS` | `true` | Enable the Stem Separation tool |
-| `ENABLE_REALESRGAN` | `true` | Enable the AI Upscaling tool |
-| `GPU_VIDEO_MAX_DURATION` | `120` | Video upscale length limit (seconds) |
-| `GPU_VIDEO_MAX_PIXELS` | `2073600` | Video upscale resolution limit (1080p) |
-| `GPU_VIDEO_MAX_FILE_SIZE_GB` | `1.0` | Video upscale input size limit |
-| `CPU_SPACE_URL` | _(empty)_ | Header link back to the CPU Space |
-| `MODEL_CACHE_DIR` | `$WORK_DIR/models` | Model weight cache directory |
-| `TOOLBOX_USERNAME` | _(empty)_ | GPU Space login username |
-| `TOOLBOX_PASSWORD` | _(empty)_ | GPU Space login and force-cancel password |
+| `DEMUCS_MODEL` | `htdemucs` | Stem-separation model |
+| `ENABLE_DEMUCS` | `true` | Show Stem Separation |
+| `ENABLE_REALESRGAN` | `true` | Show AI Upscaling |
+| `GPU_VIDEO_MAX_DURATION` | `120` | Maximum upscale video duration in seconds |
+| `GPU_VIDEO_MAX_PIXELS` | `2073600` | Maximum upscale input pixels per frame (1080p) |
+| `GPU_VIDEO_MAX_FILE_SIZE_GB` | `1.0` | Maximum video-upscale input size |
+| `MODEL_CACHE_DIR` | `$WORK_DIR/models` | Model-weight cache directory |
+| `CPU_SPACE_URL` | Empty | Optional header link to the CPU application |
 
 ## Local development
 
-CPU Space:
+Create the virtual environment at the repository root:
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.cpu.txt
-cd main
-python app.py        # or: uvicorn app:app --host 0.0.0.0 --port 7860
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
-Without a bucket mounted at `/data/media-bucket`, a local dev bucket under
-`$WORK_DIR/bucket` is used automatically.
+Run the CPU application:
 
-GPU Space (models run on CPU locally; `@spaces.GPU` is a no-op off ZeroGPU):
+```bash
+pip install -r requirements.cpu.txt
+cd main
+python app.py
+```
+
+The app is available at <http://127.0.0.1:7860>. Without a bucket mounted at
+`/data/media-bucket`, it creates a development bucket below `$WORK_DIR`.
+
+Run the GPU application from the repository root:
 
 ```bash
 pip install -r requirements.gpu.txt
 python main/gpu/app.py
 ```
 
+Off ZeroGPU, the GPU decorator is a no-op. AI models therefore use the locally
+available PyTorch device and may require substantial memory and disk space.
+
 ## Deployment
 
-Deploying requires the matching YAML frontmatter at the top of this README —
-the script refuses to run without it. Paste the Docker block from
-`gradio_sdk.txt`, deploy the CPU Space, then remove it:
+### Prerequisites
+
+- Python 3.12 and the project dependencies
+- The current `hf` CLI, authenticated with `hf auth login`, or `HF_TOKEN`
+- Permission to create/update both Spaces and the shared private bucket
+
+> [!IMPORTANT]
+> The committed README intentionally has no Hugging Face Space frontmatter.
+> Before each deployment, copy the matching CPU or GPU YAML block from
+> `gradio_sdk.txt` to the very top of this file. Remove it locally after the
+> deployment so the repository continues to hold one neutral README.
+
+### CPU Space
+
+Add the Docker frontmatter from `gradio_sdk.txt`, then run:
 
 ```bash
-# preview the staged package
+# Inspect the exact package without changing the Space
 python main/scripts/deploy_space.py --dry-run
 
-# deploy (uses `hf auth login` token or HF_TOKEN)
-python main/scripts/deploy_space.py --repo-id <user>/media-toolbox-cpu --create-bucket
+# Create/attach the private bucket on the first deployment
+python main/scripts/deploy_space.py \
+  --repo-id <username>/media-toolbox-cpu \
+  --create-bucket
 ```
 
-The script creates and keeps both application Spaces public, stages an
-SDK-specific package from the git-visible repository contents, and optionally
-creates the shared Storage Bucket as private. For CPU it publishes
-`Dockerfile.cpu` as `Dockerfile`; its inferred hardware is `cpu-basic` (use
-`--hardware cpu-upgrade` if wanted). Each deployment makes the remote Space
-repository an exact mirror of the selected package, removing stale files from
-an older layout or SDK deployment.
+The helper publishes `Dockerfile.cpu` as the Space-root `Dockerfile` and
+defaults to `cpu-basic`. Use `--hardware cpu-upgrade` or another compatible
+flavor when required.
 
-For the ZeroGPU Space, swap in the Gradio frontmatter (both blocks are stashed
-in `gradio_sdk.txt`) before deploying — remove it again afterwards:
+### GPU Space
 
-```yaml
----
-title: Media GPU Toolbox
-emoji: 🎬
-colorFrom: green
-colorTo: indigo
-sdk: gradio
-app_file: main/gpu/app.py
-python_version: 3.12.12
-disable_embedding: true
----
-```
+Replace the README frontmatter with the Gradio block from `gradio_sdk.txt`,
+then run:
 
 ```bash
 python main/scripts/deploy_space.py --dry-run
-python main/scripts/deploy_space.py --repo-id <user>/media-toolbox-gpu \
-  --attach-bucket --bucket-id <user>/media-toolbox
+
+python main/scripts/deploy_space.py \
+  --repo-id <username>/media-toolbox-gpu \
+  --attach-bucket \
+  --bucket-id <username>/media-toolbox
 ```
 
-For `sdk: gradio`, the script infers `zero-a10g`. ZeroGPU does not support the
-Docker SDK, so `Dockerfile.cpu` is the only Dockerfile source; the staged GPU
-Space contains no Dockerfile. The deploy helper publishes
-`requirements.gpu.txt` / `packages.gpu.txt` as root `requirements.txt` /
-`packages.txt`, which are the filenames the Gradio builder consumes.
+The helper defaults to `zero-a10g` and publishes `requirements.gpu.txt` and
+`packages.gpu.txt` as the root `requirements.txt` and `packages.txt` files
+expected by the Gradio builder. ZeroGPU does not support the Docker SDK.
 
-The GPU app can be gated with `TOOLBOX_USERNAME` and `TOOLBOX_PASSWORD`.
-Its FastAPI login page issues a signed 30-day CHIPS-compatible cookie
-(`SameSite=None; Secure; Partitioned`) and Gradio validates it through
-`auth_dependency`, so login works from both the Hugging Face App frame and the
-direct domain. Keep `disable_embedding: true` in the GPU metadata as an extra
-embedding safeguard. The underlying bucket remains private.
+Every deployment mirrors the selected staged package to the target Space and
+removes stale remote files. The helper also keeps the Spaces public and
+preserves the configured hardware and bucket attachment.
 
-ZeroGPU usage draws from each visitor's daily quota (free accounts get little,
-PRO gets more), so the UI shows a quota banner and requests short dynamic
-durations for better queue priority.
+### Daily physical cleanup
 
-After deploying:
-
-1. Attach the same bucket read/write at `/data/media-bucket`. Both deploy
-   commands above do this automatically (`--create-bucket` for CPU,
-   `--attach-bucket` for GPU).
-2. Deploy the authenticated daily cleanup function in `asia-south1`. The script
-   creates a short-lived GCS source bucket, deploys the function and scheduler,
-   and removes that temporary bucket even if deployment fails:
+The application denies expired downloads after 24 hours. Deploy the separate
+authenticated cleanup function to remove bucket folders older than 30 days:
 
 ```bash
+GCP_PROJECT_ID=<project-id> \
+HF_BUCKET_ID=<username>/media-toolbox \
 main/scripts/deploy_cleanup_function.sh
 ```
 
-Defaults are project `adept-fountain-349605`, bucket
-`kaushikpaul/media-toolbox`, 30-day physical retention, and 03:30 daily in
-`Asia/Kolkata`. Override them with `GCP_PROJECT_ID`, `HF_BUCKET_ID`,
-`RETENTION_DAYS`, `CLEANUP_SCHEDULE`, or `CLEANUP_TIME_ZONE`. Set `HF_TOKEN`
-to rotate the Secret Manager value; otherwise an existing secret is reused (or
-the current `hf auth login` token initializes it on first deployment).
+The script deploys a second-generation Cloud Run function and Cloud Scheduler
+job in `asia-south1` by default. It stores the Hugging Face token in Secret
+Manager, creates a uniquely named temporary GCS source bucket, and deletes that
+temporary bucket on success or failure.
 
-## Security model
+| Cleanup variable | Project default | Purpose |
+|---|---|---|
+| `GCP_PROJECT_ID` | `adept-fountain-349605` | Google Cloud project |
+| `GCP_REGION` | `asia-south1` | Function and scheduler region |
+| `HF_BUCKET_ID` | `kaushikpaul/media-toolbox` | Bucket to clean |
+| `RETENTION_DAYS` | `30` | Physical retention period |
+| `CLEANUP_SCHEDULE` | `30 3 * * *` | Daily cron schedule |
+| `CLEANUP_TIME_ZONE` | `Asia/Kolkata` | Scheduler time zone |
 
-- Local browser uploads and public HTTP(S) media URLs only. URL downloads block
-  embedded credentials, nonstandard ports, private/local/reserved IPs, unsafe
-  redirects, oversized responses, and HTML/text responses; FFprobe still
-  validates the completed input before processing.
-- Advanced mode accepts FFmpeg *arguments* only (validated via `shlex.split`);
-  extra inputs, network protocols, pipes, and path escapes are rejected.
-- No credentials in source; secrets come from HF Space settings.
+Set `HF_TOKEN` when creating or rotating the Secret Manager value. If it is
+unset, the script reuses an existing secret version or initializes it from the
+current `hf auth login` token.
+
+## Verification
+
+This repository intentionally has no test directory. Use compilation checks
+and manual end-to-end operations:
+
+```bash
+python -m compileall main/app.py main/core main/backend main/operations \
+  main/ui main/cleanup main/gpu main/cloud_cleanup
+
+python main/scripts/deploy_space.py --dry-run
+curl --fail https://www.mediatoolbox.pp.ua/_health
+```
+
+For storage changes, preview cleanup before applying it:
+
+```bash
+python main/cleanup/cleanup.py --bucket /data/media-bucket --dry-run
+```
 
 ## Known limitations
 
-- Transfer speed still depends on the visitor's upstream/downstream bandwidth
-  and the Hugging Face edge path; the app cannot guarantee a fixed duration.
-- Target-size mode requires a detectable duration.
-- Image-based subtitles (PGS) cannot be exported as text.
+- Large browser transfers are limited by the user's network and the Hugging
+  Face edge path; a fixed upload or download duration cannot be guaranteed.
+- Target-size encoding requires a detectable source duration.
+- Image-based subtitle formats such as PGS cannot be exported as text.
+- Video AI upscaling is experimental and intentionally limited to short,
+  bounded-resolution inputs.
+
+## License
+
+Media Toolbox is available under the [MIT License](LICENSE).
