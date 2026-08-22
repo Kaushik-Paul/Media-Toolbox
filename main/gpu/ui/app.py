@@ -14,7 +14,7 @@ QUOTA_BANNER = """
 <div class='media-info-card' style='margin-bottom:0.8rem'>
   <b>ZeroGPU processing uses your Hugging Face GPU quota.</b><br>
   <span class='dim'>Large or long videos may consume significant quota.
-  Outputs are kept for 24 hours, then deleted.</span>
+  Downloads remain available for 24 hours.</span>
 </div>
 """
 
@@ -40,13 +40,15 @@ def build_blocks() -> gr.Blocks:
         global_controls()
         gr.HTML(QUOTA_BANNER)
         with gr.Tabs():
-            with gr.Tab("Transcription"):
-                transcription.transcription_tab()
-            with gr.Tab("Stem Separation"):
-                stems.stems_tab()
-            with gr.Tab("AI Upscaling"):
-                upscale.upscale_tab()
-            build_basic_tool_tabs(include_history=False)
+            def _gpu_tabs() -> None:
+                with gr.Tab("Transcription"):
+                    transcription.transcription_tab()
+                with gr.Tab("Stem Separation"):
+                    stems.stems_tab()
+                with gr.Tab("AI Upscaling"):
+                    upscale.upscale_tab()
+
+            build_basic_tool_tabs(include_history=False, after_subtitles=_gpu_tabs)
             with gr.Tab("History"):
                 history.history_tab()
     return blocks

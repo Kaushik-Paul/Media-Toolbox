@@ -101,7 +101,7 @@ class BucketStorage:
         return results
 
     def resolve_output(self, prefix: str, file_id: str, now: float | None = None) -> tuple[Path, JobManifest]:
-        """Resolve a downloadable output file, enforcing logical 24h expiry."""
+        """Resolve an output file while enforcing its manifest expiry."""
         manifest = self.get_manifest(prefix)
         if is_expired(manifest.expires_unix, now):
             raise JobExpiredError(prefix)

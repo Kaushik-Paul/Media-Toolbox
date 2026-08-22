@@ -12,6 +12,7 @@ gradio>=6.0
 spaces
 python-dotenv>=1.0  # local dev only; HF Spaces inject secrets as env vars
 huggingface_hub>=1.8.0
+httpx>=0.27
 pydantic>=2.6
 
 # FastAPI host app (health + expiry-checked download routes) with Gradio mounted.
