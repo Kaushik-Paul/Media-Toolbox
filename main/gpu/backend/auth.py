@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from fastapi import Request
 from fastapi.responses import HTMLResponse, Response
 
+from core.branding import FAVICON_HEAD
+
 
 AUTH_COOKIE = "media-toolbox-auth"
 SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
@@ -26,6 +28,7 @@ def _login_page(*, error: str = "") -> str:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
+  {FAVICON_HEAD}
   <title>Media AI Toolbox login</title>
   <style>
     :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}

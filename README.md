@@ -217,7 +217,7 @@ main/
 | `WORK_DIR` | `/tmp/media-toolbox` | Ephemeral upload and processing directory |
 | `MAX_CONCURRENT_CPU_JOBS` | `1` | Worker concurrency limit |
 | `MIN_FREE_DISK_GB` | `2.0` | Minimum free space required before a job starts |
-| `MAX_INPUT_SIZE_GB` | `8.0` | Maximum local or remote input size |
+| `MAX_INPUT_SIZE_GB` | `10.0` | Maximum local browser upload or remote URL input size |
 | `FFMPEG_PATH` | `ffmpeg` | FFmpeg executable |
 | `FFPROBE_PATH` | `ffprobe` | FFprobe executable |
 | `PORT` | `7860` | HTTP server port |

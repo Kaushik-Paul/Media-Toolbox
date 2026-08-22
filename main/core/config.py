@@ -38,7 +38,7 @@ class Settings:
 
     max_concurrent_jobs: int = 1
     min_free_disk_gb: float = 2.0
-    max_input_size_gb: float = 8.0
+    max_input_size_gb: float = 10.0
 
     ffmpeg_path: str = "ffmpeg"
     ffprobe_path: str = "ffprobe"
@@ -61,7 +61,7 @@ class Settings:
             work_dir=Path(_env_str("WORK_DIR", "/tmp/media-toolbox")),
             max_concurrent_jobs=_env_int("MAX_CONCURRENT_CPU_JOBS", 1),
             min_free_disk_gb=_env_float("MIN_FREE_DISK_GB", 2.0),
-            max_input_size_gb=_env_float("MAX_INPUT_SIZE_GB", 8.0),
+            max_input_size_gb=_env_float("MAX_INPUT_SIZE_GB", 10.0),
             ffmpeg_path=_env_str("FFMPEG_PATH", "ffmpeg"),
             ffprobe_path=_env_str("FFPROBE_PATH", "ffprobe"),
             log_tail_lines=_env_int("LOG_TAIL_LINES", 40),
