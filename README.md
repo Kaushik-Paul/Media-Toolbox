@@ -189,7 +189,7 @@ main/
   cleanup/cleanup.py        Manual mounted-bucket cleanup utility
   scripts/
     deploy_space.py         CPU/GPU Space packaging and deployment
-    deploy_cleanup_function.sh
+    deploy_cleanup_function.py
                             Cloud function and scheduler deployment
 ```
 
@@ -334,13 +334,13 @@ authenticated cleanup function to remove bucket folders older than 30 days:
 ```bash
 GCP_PROJECT_ID=<project-id> \
 HF_BUCKET_ID=<username>/media-toolbox \
-main/scripts/deploy_cleanup_function.sh
+python main/scripts/deploy_cleanup_function.py
 ```
 
-The script deploys a second-generation Cloud Run function and Cloud Scheduler
-job in `asia-south1` by default. It stores the Hugging Face token in Secret
-Manager, creates a uniquely named temporary GCS source bucket, and deletes that
-temporary bucket on success or failure.
+The Python script deploys a second-generation Cloud Run function and Cloud
+Scheduler job in `asia-south1` by default. It stores the Hugging Face token in
+Secret Manager, creates a uniquely named temporary GCS source bucket, and
+deletes that temporary bucket on success or failure.
 
 | Cleanup variable | Project default | Purpose |
 |---|---|---|

@@ -75,7 +75,7 @@ DEPLOY_IGNORE_PATTERNS = [
     ".env.*",
     ".idea/**",
     "main/cloud_cleanup/**",
-    "main/scripts/deploy_cleanup_function.sh",
+    "main/scripts/deploy_cleanup_function.py",
 ]
 
 
@@ -339,7 +339,7 @@ def main() -> None:
             )
         )
         + "  2. Deploy/update the daily 30-day Google Cloud cleanup:\n"
-        "       main/scripts/deploy_cleanup_function.sh\n"
+        "       python main/scripts/deploy_cleanup_function.py\n"
         "  3. Verify the Space build/startup logs and run /_health.\n"
         f"  4. Space: https://huggingface.co/spaces/{space_id}"
     )
