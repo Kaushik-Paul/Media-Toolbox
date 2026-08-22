@@ -13,7 +13,8 @@ Hosted at **https://www.mediatoolbox.pp.ua/**.
   Real-ESRGAN. Lives in `main/gpu/`. **This is built and working.** It reuses the
   same manifest schema, bucket layout, and job-prefix convention.
 - Shared private HF Storage Bucket (`media-toolbox`) mounted at
-  `/data/media-bucket` holds outputs for 24 hours.
+  `/data/media-bucket` exposes outputs for 24 hours. A daily authenticated
+  Cloud Run function physically removes job folders older than 30 days.
 
 ## Repository layout
 
@@ -28,13 +29,15 @@ packages.gpu.txt     # GPU apt deps; deployed as root packages.txt
 main/                # all CPU, GPU, and shared application logic
   app.py             # entrypoint: FastAPI + Gradio mounted at "/"
   scripts/deploy_space.py  # stages and deploys the selected CPU/GPU Space
+  scripts/deploy_cleanup_function.sh # deploys daily GCP bucket cleanup
+  cloud_cleanup/      # Cloud Run function source (HF server-side deletion)
   core/              # config, models, filenames, time_utils, media_types,
                      # manifests, storage/ (bucket + retention)
   backend/           # probe, capabilities, command_builder, ffmpeg_runner,
                      # security, job_manager, services (singletons), download (API)
   operations/        # one module per operation; registry in __init__.py
   ui/                # Gradio Blocks: app, theme, components, tools, history
-  cleanup/cleanup.py # hourly expiry cleanup job (--dry-run, idempotent)
+  cleanup/cleanup.py # optional mounted-bucket cleanup utility
   gpu/               # the GPU Space application code (ZeroGPU)
     app.py            # entrypoint: FastAPI + Gradio; adds main/ to sys.path
     backend/          # config, job manager, pre/postprocessing, services
@@ -67,7 +70,9 @@ Useful overrides: `WORK_DIR=/tmp/mt BUCKET_MOUNT=/tmp/mt-bucket`.
 5. Bucket layout: `jobs/<expires_unix>_<job_id>/manifest.json + outputs`.
    Manifest schema: `core/models.py::JobManifest` (schema_version 1).
 6. CPU concurrency defaults to 1 (`MAX_CONCURRENT_CPU_JOBS`); jobs queue.
-7. Local browser uploads only. No URL/remote input (SSRF surface).
+7. Remote inputs must go through `core/remote_download.py`: HTTP(S) only,
+   public IPs and ports 80/443 only, every redirect revalidated, streamed size
+   cap, cancellation, and FFprobe validation. Never hand a URL to FFmpeg.
 8. Advanced mode = validated FFmpeg *arguments* only (`backend/security.py`);
    the app always controls input/output filenames.
 9. No SQL database, no Redis/Celery, no user accounts. The bucket is the
@@ -151,6 +156,7 @@ Useful overrides: `WORK_DIR=/tmp/mt BUCKET_MOUNT=/tmp/mt-bucket`.
   - Hardware defaults: `cpu-basic` (docker), `zero-a10g` (gradio).
   - Auth via `hf auth login` or `HF_TOKEN`.
 - Attach private bucket at `/data/media-bucket` (read/write).
-- Schedule `python main/cleanup/cleanup.py --bucket /data/media-bucket` as an
-  `@hourly` HF Job — exactly one, mounting the CPU Space read-only for the
-  script and the bucket read/write.
+- Deploy the daily 30-day physical bucket cleanup with
+  `main/scripts/deploy_cleanup_function.sh`. It targets `asia-south1`, invokes
+  through an OIDC-authenticated Cloud Scheduler job, and deletes through the HF
+  server-side bucket API without transferring media through Google.

@@ -40,12 +40,14 @@ files to the root names the chosen HF builder expects.
   metadata, FFprobe media info
 - **Advanced**: validated custom FFmpeg arguments with live command preview
 - **History**: outputs persist in a private HF Storage Bucket for **24 hours**,
-  then download is denied (410) and an hourly cleanup job deletes them
+  then download is denied (410); physical bucket objects are removed after 30
+  days by a low-cost daily Google Cloud function
 
-Video, Audio, and Subtitle sections each have a shared session upload above
-their subtools. Upload a source once, then switch operations without uploading
-it again; Merge, Concatenate, Add Track, and Burn ask only for their additional
-inputs.
+Video, Audio, and Subtitle sections each have a shared session source above
+their subtools. Upload a local file or securely fetch a public direct, Google
+Drive, OneDrive, or SharePoint URL once, then switch operations without
+uploading it again; Merge, Concatenate, Add Track, and Burn ask only for their
+additional inputs.
 
 ## Features (GPU Space, ZeroGPU)
 
@@ -66,6 +68,9 @@ inputs.
 
 Both Spaces stream uploads into the work filesystem and hard-link uploaded
 inputs into job directories when possible, avoiding a second full-file copy.
+Downloads use 1 MiB sequential chunks and HTTP byte ranges. Server-side URL
+fetches stream directly to disk, enforce the input-size limit, revalidate every
+redirect, and reject local/private/reserved network destinations.
 One global activity gate permits only one upload or conversion at a time. A
 password-protected force-cancel control uses `TOOLBOX_PASSWORD`. Results are
 served by expiry-checked HTTP routes with byte-range support, and the UI has a
@@ -77,8 +82,11 @@ persistent light/dark toggle stored in the browser.
 - FFmpeg/FFprobe via argument arrays only (never `shell=True`)
 - Outputs are verified with FFprobe, then moved into the mounted bucket at
   `/data/media-bucket` under `jobs/<expires_unix>_<job_id>/`
-- `main/cleanup/cleanup.py` runs hourly (HF Scheduled Job) and deletes expired
-  prefixes; idempotent, supports `--dry-run`
+- `main/cloud_cleanup/main.py` runs once daily as an authenticated Cloud Run
+  function and deletes bucket job folders older than 30 days through the HF
+  server-side API; media bytes never pass through Google
+- `main/cleanup/cleanup.py` remains an idempotent local/mounted-bucket cleanup
+  utility with `--dry-run`
 
 ## API
 
@@ -208,22 +216,27 @@ After deploying:
 1. Attach the same bucket read/write at `/data/media-bucket`. Both deploy
    commands above do this automatically (`--create-bucket` for CPU,
    `--attach-bucket` for GPU).
-2. Create exactly one hourly cleanup job, not one per Space. The job needs both
-   the CPU Space repository (read-only, for the script) and the bucket
-   (read/write):
+2. Deploy the authenticated daily cleanup function in `asia-south1`. The script
+   creates a short-lived GCS source bucket, deploys the function and scheduler,
+   and removes that temporary bucket even if deployment fails:
 
 ```bash
-hf jobs scheduled run \
-  --name media-toolbox-cleanup \
-  --volume hf://spaces/<user>/media-toolbox-cpu:/workspace:ro \
-  --volume hf://buckets/<user>/media-toolbox:/data/media-bucket \
-  @hourly python:3.12-slim \
-  python /workspace/main/cleanup/cleanup.py --bucket /data/media-bucket
+main/scripts/deploy_cleanup_function.sh
 ```
+
+Defaults are project `adept-fountain-349605`, bucket
+`kaushikpaul/media-toolbox`, 30-day physical retention, and 03:30 daily in
+`Asia/Kolkata`. Override them with `GCP_PROJECT_ID`, `HF_BUCKET_ID`,
+`RETENTION_DAYS`, `CLEANUP_SCHEDULE`, or `CLEANUP_TIME_ZONE`. Set `HF_TOKEN`
+to rotate the Secret Manager value; otherwise an existing secret is reused (or
+the current `hf auth login` token initializes it on first deployment).
 
 ## Security model
 
-- Local browser uploads only; no URL/remote input.
+- Local browser uploads and public HTTP(S) media URLs only. URL downloads block
+  embedded credentials, nonstandard ports, private/local/reserved IPs, unsafe
+  redirects, oversized responses, and HTML/text responses; FFprobe still
+  validates the completed input before processing.
 - Advanced mode accepts FFmpeg *arguments* only (validated via `shlex.split`);
   extra inputs, network protocols, pipes, and path escapes are rejected.
 - No credentials in source; secrets come from HF Space settings.

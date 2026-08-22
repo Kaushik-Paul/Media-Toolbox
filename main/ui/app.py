@@ -1,6 +1,8 @@
 """Assemble the Gradio Blocks application."""
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import gradio as gr
 
 from ui import tools
@@ -10,12 +12,16 @@ from ui.shell import global_controls
 HEADER = """
 <div class='app-header'>
   <h1>Media Toolbox</h1>
-  <p>FFmpeg-powered video & audio conversion. Outputs are kept for 24 hours, then deleted.</p>
+  <p>FFmpeg-powered video & audio conversion. Downloads remain available for 24 hours.</p>
 </div>
 """
 
 
-def build_basic_tool_tabs(*, include_history: bool = True) -> None:
+def build_basic_tool_tabs(
+    *,
+    include_history: bool = True,
+    after_subtitles: Callable[[], None] | None = None,
+) -> None:
     """Render every shared FFmpeg tool into the current outer Tabs."""
     with gr.Tab("Video"):
         video_source = tools.video_source_upload()
@@ -76,6 +82,8 @@ def build_basic_tool_tabs(*, include_history: bool = True) -> None:
                 tools.subtitles_add_tab(subtitle_video, subtitle_file)
             with gr.Tab("Burn"):
                 tools.subtitles_burn_tab(subtitle_video, subtitle_file)
+    if after_subtitles is not None:
+        after_subtitles()
     with gr.Tab("Utilities"):
         with gr.Tabs():
             with gr.Tab("Make Compatible"):

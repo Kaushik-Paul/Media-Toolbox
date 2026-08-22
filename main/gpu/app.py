@@ -58,6 +58,7 @@ from gpu.backend.auth import LoginLandingMiddleware, SignedCookieAuth, login_res
 from gpu.backend.services import get_services, init_services
 
 services = init_services()
+DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
 app = FastAPI(title="Media AI Toolbox", version=services.settings.app_version)
 
@@ -126,7 +127,9 @@ def download(prefix: str, file_id: str) -> FileResponse:
     except JobNotFoundError:
         raise HTTPException(status_code=404, detail="File not found")
     out = next(o for o in manifest.outputs if o.id == file_id)
-    return FileResponse(path, filename=out.filename, media_type=out.mime_type)
+    response = FileResponse(path, filename=out.filename, media_type=out.mime_type)
+    response.chunk_size = DOWNLOAD_CHUNK_SIZE
+    return response
 
 
 @app.delete("/api/jobs/{prefix}")

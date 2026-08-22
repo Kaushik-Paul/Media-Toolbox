@@ -11,6 +11,7 @@ import gradio as gr
 from backend.job_manager import JobStatus
 from backend.services import get_services
 from core.models import MediaInfo
+from core.remote_download import RemoteDownloadError, download_remote_media
 from core.storage.retention import seconds_until
 from core.time_utils import format_countdown, format_hms, format_size
 from operations.base import OperationError
@@ -298,9 +299,57 @@ class OpUI:
 
 def upload_row(label: str = "Drop media here", file_types: list[str] | None = None,
                file_count: str = "single") -> UploadContext:
-    """Standard upload + auto-probe info card. Returns (file, info_html, info_state)."""
+    """Local upload or secure URL fetch plus automatic FFprobe validation."""
     file_input = gr.File(label=label, file_count=file_count, file_types=file_types, type="filepath")
+    with gr.Accordion("Or fetch from a public URL", open=False):
+        gr.Markdown(
+            "Supports direct media URLs and public Google Drive, OneDrive, or "
+            "SharePoint file links. Private/local network addresses are blocked."
+        )
+        with gr.Row():
+            source_url = gr.Textbox(
+                label="Media URL",
+                placeholder="https://...",
+                max_lines=1,
+                scale=4,
+            )
+            fetch_button = gr.Button("Fetch URL", variant="secondary", scale=1)
+        fetch_status = gr.HTML()
     info_html = gr.HTML()
     info_state = gr.State({})
     file_input.change(fn=probe_upload, inputs=[file_input], outputs=[info_html, info_state])
+
+    def _fetch(url: str, progress=gr.Progress()):
+        services = get_services()
+
+        def _progress(downloaded: int, expected: int | None) -> None:
+            if expected:
+                progress(min(1.0, downloaded / expected), desc="Downloading from URL")
+            else:
+                progress(0, desc=f"Downloaded {format_size(downloaded)}")
+
+        try:
+            result = download_remote_media(
+                url,
+                services.settings.work_dir,
+                int(services.settings.max_input_size_gb * (1024 ** 3)),
+                services.activity,
+                _progress,
+            )
+            info, state = probe_upload(str(result.path))
+            status = (
+                "<div class='media-info-card'><b>URL download complete.</b> "
+                f"<span class='dim'>{format_size(result.size)}</span></div>"
+            )
+            return str(result.path), info, state, status
+        except RemoteDownloadError as exc:
+            return None, "", {}, error_html(str(exc))
+        except Exception as exc:  # noqa: BLE001 - concise user-facing boundary
+            return None, "", {}, error_html("Could not download this URL.", str(exc))
+
+    fetch_button.click(
+        fn=_fetch,
+        inputs=[source_url],
+        outputs=[file_input, info_html, info_state, fetch_status],
+    )
     return UploadContext(file_input, info_html, info_state)

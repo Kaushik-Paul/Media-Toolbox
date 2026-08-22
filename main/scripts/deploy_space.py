@@ -74,6 +74,8 @@ DEPLOY_IGNORE_PATTERNS = [
     ".env",
     ".env.*",
     ".idea/**",
+    "main/cloud_cleanup/**",
+    "main/scripts/deploy_cleanup_function.sh",
 ]
 
 
@@ -325,10 +327,6 @@ def main() -> None:
         )
         print(f"Attached {bucket_id} read/write at {BUCKET_MOUNT}")
 
-    cleanup_space_id = (
-        space_id if sdk == "docker"
-        else f"{namespace}/{DEFAULT_SPACE_NAMES['docker']}"
-    )
     print(
         "\nNext steps:\n"
         + (
@@ -340,12 +338,8 @@ def main() -> None:
                 f"hf://buckets/{bucket_id}:{BUCKET_MOUNT}\n"
             )
         )
-        + "  2. Create one cleanup schedule for the shared bucket (CPU deploy only):\n"
-        f"       hf jobs scheduled run --name media-toolbox-cleanup "
-        f"--volume hf://spaces/{cleanup_space_id}:/workspace:ro "
-        f"--volume hf://buckets/{bucket_id}:{BUCKET_MOUNT} "
-        f"@hourly python:3.12-slim python /workspace/main/cleanup/cleanup.py "
-        f"--bucket {BUCKET_MOUNT}\n"
+        + "  2. Deploy/update the daily 30-day Google Cloud cleanup:\n"
+        "       main/scripts/deploy_cleanup_function.sh\n"
         "  3. Verify the Space build/startup logs and run /_health.\n"
         f"  4. Space: https://huggingface.co/spaces/{space_id}"
     )

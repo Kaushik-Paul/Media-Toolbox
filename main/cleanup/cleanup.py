@@ -1,7 +1,7 @@
-"""Hourly cleanup job: delete expired job prefixes from the bucket.
+"""Mounted-bucket maintenance utility: delete logically expired job prefixes.
 
-Runs as a Hugging Face Scheduled Job (or locally). The bucket is expected to be
-mounted as a filesystem path (same layout the Spaces write).
+This remains useful for manual/local maintenance. Production physical retention
+is handled daily by ``main/cloud_cleanup/main.py`` without an HF Job.
 
 Usage:
     python cleanup/cleanup.py --bucket /data/media-bucket

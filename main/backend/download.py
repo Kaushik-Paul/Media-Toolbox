@@ -12,6 +12,7 @@ from core.storage.retention import seconds_until
 from core.time_utils import format_countdown
 
 router = APIRouter()
+DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 @router.get("/_health")
@@ -81,7 +82,11 @@ def download(prefix: str, file_id: str) -> FileResponse:
     except JobNotFoundError:
         raise HTTPException(status_code=404, detail="File not found")
     out = next(o for o in manifest.outputs if o.id == file_id)
-    return FileResponse(path, filename=out.filename, media_type=out.mime_type)
+    response = FileResponse(path, filename=out.filename, media_type=out.mime_type)
+    # Starlette defaults to 64 KiB chunks. Larger sequential reads reduce
+    # Python/ASGI and mounted-bucket overhead for multi-gigabyte downloads.
+    response.chunk_size = DOWNLOAD_CHUNK_SIZE
+    return response
 
 
 @router.delete("/api/jobs/{prefix}")
