@@ -45,8 +45,8 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, RedirectResponse
 
 from core.storage.bucket import JobExpiredError, JobNotFoundError
 from core.http_activity import ExclusiveUploadMiddleware
@@ -54,6 +54,7 @@ from core.storage.retention import seconds_until
 from core.time_utils import format_countdown
 
 from gpu.backend.config import on_zerogpu, report_zerogpu_startup
+from gpu.backend.auth import LoginLandingMiddleware, SignedCookieAuth, login_response
 from gpu.backend.services import get_services, init_services
 
 services = init_services()
@@ -147,10 +148,39 @@ blocks = build_blocks()
 # files are served exclusively through the expiry-checked routes above.
 _allowed = [str(services.settings.work_dir)]
 
-# Gradio's built-in login page gates the whole UI when credentials are set.
-_auth = None
+# Use a signed cookie plus Gradio's external-auth hook. Gradio 6.25's built-in
+# unauthenticated shell can remain stuck on "Loading..." behind the Space
+# proxy; the small FastAPI login landing page below does not depend on Gradio
+# bootstrapping before credentials are accepted.
+_cookie_auth = None
+_auth_dependency = None
 if services.gpu_settings.toolbox_username and services.gpu_settings.toolbox_password:
-    _auth = (services.gpu_settings.toolbox_username, services.gpu_settings.toolbox_password)
+    _cookie_auth = SignedCookieAuth(
+        services.gpu_settings.toolbox_username,
+        services.gpu_settings.toolbox_password,
+    )
+    _auth_dependency = _cookie_auth.user_for
+
+    @app.get("/login")
+    async def login_page():
+        return login_response()
+
+    @app.post("/login")
+    async def login(request: Request):
+        form = await request.form()
+        username = str(form.get("username", ""))
+        password = str(form.get("password", ""))
+        if not _cookie_auth.credentials_match(username, password):
+            return login_response("Incorrect username or password.", status_code=401)
+        response = RedirectResponse(url="/", status_code=303)
+        _cookie_auth.set_cookie(response)
+        return response
+
+    @app.get("/logout")
+    async def logout():
+        response = RedirectResponse(url="/", status_code=303)
+        _cookie_auth.clear_cookie(response)
+        return response
 else:
     logging.getLogger(__name__).warning(
         "TOOLBOX_USERNAME/TOOLBOX_PASSWORD not set; UI login is disabled"
@@ -163,7 +193,7 @@ app = gr.mount_gradio_app(
     theme=THEME,
     css=CSS,
     js=THEME_JS,
-    auth=_auth,
+    auth_dependency=_auth_dependency,
     allowed_paths=_allowed,
     max_file_size=f"{int(services.settings.max_input_size_gb)}gb",
     # The Gradio SDK enables SSR on Hugging Face. With mount_gradio_app(),
@@ -172,44 +202,8 @@ app = gr.mount_gradio_app(
     ssr_mode=False,
 )
 
-# Gradio issues its auth token as a session cookie, so the login is lost when
-# the browser closes. Extend those cookies to 30 days so users stay signed in.
-SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
-
-
-class _PersistAuthCookieMiddleware:
-    """Append Max-Age to Gradio's access-token cookies set by POST /login."""
-
-    def __init__(self, app):
-        self.app = app
-
-    async def __call__(self, scope, receive, send):
-        if scope["type"] != "http":
-            await self.app(scope, receive, send)
-            return
-
-        async def send_wrapper(message):
-            if (
-                message["type"] == "http.response.start"
-                and scope.get("path", "").rstrip("/") == "/login"
-            ):
-                headers = []
-                for name, value in message.get("headers", []):
-                    if (
-                        name.lower() == b"set-cookie"
-                        and b"access-token-" in value
-                        and b"max-age" not in value.lower()
-                    ):
-                        value += f"; Max-Age={SESSION_MAX_AGE_SECONDS}".encode()
-                    headers.append((name, value))
-                message["headers"] = headers
-            await send(message)
-
-        await self.app(scope, receive, send_wrapper)
-
-
-if _auth is not None:
-    app.add_middleware(_PersistAuthCookieMiddleware)
+if _cookie_auth is not None:
+    app.add_middleware(LoginLandingMiddleware, auth=_cookie_auth)
 app.add_middleware(ExclusiveUploadMiddleware, activity=services.activity)
 # ZeroGPU normally discovers decorated functions when Blocks.launch() runs.
 # This app mounts Gradio under FastAPI, so explicitly execute the equivalent

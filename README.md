@@ -193,9 +193,11 @@ Space contains no Dockerfile. The deploy helper publishes
 `packages.txt`, which are the filenames the Gradio builder consumes.
 
 The GPU app can be gated with `TOOLBOX_USERNAME` and `TOOLBOX_PASSWORD`.
-`disable_embedding: true` opens it as a first-party app instead of a
-Hugging Face iframe, avoiding browsers that block the login cookie as a
-third-party cookie. The underlying bucket remains private.
+Its FastAPI login page issues a signed 30-day CHIPS-compatible cookie
+(`SameSite=None; Secure; Partitioned`) and Gradio validates it through
+`auth_dependency`, so login works from both the Hugging Face App frame and the
+direct domain. Keep `disable_embedding: true` in the GPU metadata as an extra
+embedding safeguard. The underlying bucket remains private.
 
 ZeroGPU usage draws from each visitor's daily quota (free accounts get little,
 PRO gets more), so the UI shows a quota banner and requests short dynamic

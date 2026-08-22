@@ -109,7 +109,11 @@ THEME_JS = """
 
     const refreshLabel = () => {
         const label = document.querySelector("#theme-toggle .theme-toggle-label");
-        if (label) label.textContent = desired === "dark" ? "Light mode" : "Dark mode";
+        const nextLabel = desired === "dark" ? "Light mode" : "Dark mode";
+        // Avoid retriggering our own subtree observer forever. Assigning
+        // textContent emits a childList mutation even when the value is the
+        // same, which can starve Gradio's hydration loop.
+        if (label && label.textContent !== nextLabel) label.textContent = nextLabel;
     };
     document.addEventListener("click", (event) => {
         const button = event.target.closest && event.target.closest("#theme-toggle");
