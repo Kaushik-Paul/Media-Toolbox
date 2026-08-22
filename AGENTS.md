@@ -29,7 +29,7 @@ packages.gpu.txt     # GPU apt deps; deployed as root packages.txt
 main/                # all CPU, GPU, and shared application logic
   app.py             # entrypoint: FastAPI + Gradio mounted at "/"
   scripts/deploy_space.py  # stages and deploys the selected CPU/GPU Space
-  scripts/deploy_cleanup_function.sh # deploys daily GCP bucket cleanup
+  scripts/deploy_cleanup_function.py # deploys daily GCP bucket cleanup
   cloud_cleanup/      # Cloud Run function source (HF server-side deletion)
   core/              # config, models, filenames, time_utils, media_types,
                      # manifests, storage/ (bucket + retention)
@@ -157,6 +157,6 @@ Useful overrides: `WORK_DIR=/tmp/mt BUCKET_MOUNT=/tmp/mt-bucket`.
   - Auth via `hf auth login` or `HF_TOKEN`.
 - Attach private bucket at `/data/media-bucket` (read/write).
 - Deploy the daily 30-day physical bucket cleanup with
-  `main/scripts/deploy_cleanup_function.sh`. It targets `asia-south1`, invokes
-  through an OIDC-authenticated Cloud Scheduler job, and deletes through the HF
-  server-side bucket API without transferring media through Google.
+  `python main/scripts/deploy_cleanup_function.py`. It targets `asia-south1`,
+  invokes through an OIDC-authenticated Cloud Scheduler job, and deletes through
+  the HF server-side bucket API without transferring media through Google.
