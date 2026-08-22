@@ -30,6 +30,24 @@ CSS = """
 #theme-toggle:hover { border-color: var(--color-accent); transform: translateY(-1px); }
 .theme-toggle-icon { font-size: 1.15rem; line-height: 1; }
 
+.activity-actions {
+    align-items: center;
+    gap: 0.75rem;
+}
+.activity-actions > * { margin: 0 !important; }
+.activity-actions input,
+.activity-actions button { min-height: 42px; }
+
+/* Gradio's full progress animation is positioned over every event output by
+   default. URL fetches target only this reserved slot, keeping the file input,
+   URL controls, and tool tabs stable while the remote file downloads. */
+.url-fetch-progress {
+    position: relative;
+    isolation: isolate;
+    min-height: 4.5rem;
+    overflow: hidden;
+}
+
 .media-info-card {
     border: 1px solid var(--border-color-primary);
     border-radius: 12px;
@@ -82,6 +100,8 @@ CSS = """
 @media (max-width: 640px) {
     .app-header h1 { font-size: 1.5rem; }
     .result-stats { gap: 1rem; }
+    .activity-actions { align-items: stretch; }
+    .activity-actions > * { min-width: 100% !important; }
 }
 """
 

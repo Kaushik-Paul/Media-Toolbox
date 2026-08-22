@@ -97,10 +97,22 @@ def upload_row(label: str = "Drop media here", file_types: list[str] | None = No
                 label="Media URL", placeholder="https://...", max_lines=1, scale=4
             )
             fetch_button = gr.Button("Fetch URL", variant="secondary", scale=1)
-        fetch_status = gr.HTML()
+        fetch_status = gr.HTML(elem_classes=["url-fetch-progress"])
     info_html = gr.HTML()
     info_state = gr.State({})
-    file_input.change(fn=probe_upload, inputs=[file_input], outputs=[info_html, info_state])
+    file_input.upload(
+        fn=probe_upload,
+        inputs=[file_input],
+        outputs=[info_html, info_state],
+        show_progress="minimal",
+    )
+    file_input.clear(
+        fn=lambda: ("", {}),
+        inputs=[],
+        outputs=[info_html, info_state],
+        queue=False,
+        show_progress="hidden",
+    )
 
     def _fetch(url: str, progress=gr.Progress()):
         services = get_services()
@@ -134,6 +146,7 @@ def upload_row(label: str = "Drop media here", file_types: list[str] | None = No
         fn=_fetch,
         inputs=[source_url],
         outputs=[file_input, info_html, info_state, fetch_status],
+        show_progress_on=[fetch_status],
     )
     return UploadContext(file_input, info_html, info_state)
 
