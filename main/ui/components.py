@@ -10,7 +10,6 @@ import gradio as gr
 
 from backend.job_manager import JobStatus
 from backend.services import get_services
-from core.media_types import MediaKind, kind_from_extension
 from core.models import MediaInfo
 from core.storage.retention import seconds_until
 from core.time_utils import format_countdown, format_hms, format_size
@@ -131,6 +130,26 @@ def result_card_html(state) -> str:
         for k, v in (res.summary or {}).items()
     )
     remaining = format_countdown(seconds_until(res.expires_unix))
+    downloads = "".join(
+        f"<li><a href='/api/jobs/{res.prefix}/download/{o.id}' download>"
+        f"{html.escape(o.filename)}</a> <span class='dim'>({format_size(o.size)})</span></li>"
+        for o in res.outputs
+    )
+    previews = []
+    for output in res.outputs:
+        url = f"/api/jobs/{res.prefix}/download/{output.id}"
+        name = html.escape(output.filename)
+        if output.mime_type.startswith("video/"):
+            previews.append(
+                f"<video controls preload='metadata' class='result-preview' src='{url}'></video>"
+            )
+        elif output.mime_type.startswith("audio/"):
+            previews.append(
+                f"<div><span class='dim'>{name}</span><audio controls preload='metadata' "
+                f"class='result-audio' src='{url}'></audio></div>"
+            )
+        elif output.mime_type.startswith("image/"):
+            previews.append(f"<img class='result-preview' src='{url}' alt='{name}'>")
     return f"""
 <div class='result-card'>
   <b style='font-size:1.05rem'>&#10003; Complete</b>
@@ -142,22 +161,10 @@ def result_card_html(state) -> str:
     {extra}
     <div class='stat'><b>{remaining}</b><span>Expires in</span></div>
   </div>
+  {''.join(previews)}
+  <ul class='download-list'>{downloads}</ul>
+  <div class='expiry-note'>Downloads use byte-range streaming and expire with this job.</div>
 </div>"""
-
-
-def _preview_updates(paths: list[Path]):
-    video = gr.update(visible=False, value=None)
-    audio = gr.update(visible=False, value=None)
-    image = gr.update(visible=False, value=None)
-    if paths:
-        kind = kind_from_extension(paths[0].name)
-        if kind == MediaKind.VIDEO:
-            video = gr.update(visible=True, value=str(paths[0]))
-        elif kind == MediaKind.AUDIO:
-            audio = gr.update(visible=True, value=str(paths[0]))
-        elif kind == MediaKind.IMAGE:
-            image = gr.update(visible=True, value=str(paths[0]))
-    return video, audio, image
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +190,7 @@ class OpUI:
             self.preview_video = gr.Video(visible=False, label="Preview")
             self.preview_audio = gr.Audio(visible=False, label="Preview")
             self.preview_image = gr.Image(visible=False, label="Preview")
-            self.result_files = gr.File(label="Downloads", file_count="multiple", interactive=False)
+            self.result_files = gr.HTML()
             with gr.Accordion("Advanced details", open=False):
                 self.cmd_md = gr.Markdown()
             self.delete_btn = gr.Button("Delete now", variant="stop", size="sm")
@@ -262,13 +269,13 @@ class OpUI:
 
         if state.status == JobStatus.COMPLETED and state.result:
             state_box["prefix"] = state.result.prefix
-            video, audio, image = _preview_updates(state.result.output_paths)
+            video, audio, image = self._hidden_previews()
             cmds = "\n\n".join(f"```bash\n{c}\n```" for c in state.result.command_previews)
             yield (
                 progress_html(100, "Complete", time.monotonic() - started),
                 gr.update(visible=True),
                 result_card_html(state),
-                [str(p) for p in state.result.output_paths],
+                "",
                 video, audio, image,
                 cmds,
                 state_box,

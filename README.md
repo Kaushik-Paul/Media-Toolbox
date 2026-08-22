@@ -9,8 +9,9 @@ Two applications share one repository and one private HF Storage Bucket:
 
 - **CPU Space** (`media-toolbox-cpu`, Docker SDK) — general FFmpeg operations.
   Entrypoint: `main/app.py` (FastAPI + Gradio + FFmpeg).
-- **GPU Space** (`media-toolbox-gpu`, Gradio SDK + ZeroGPU) — Whisper, Demucs,
-  Real-ESRGAN. Entrypoint: `main/gpu/app.py`.
+- **GPU Space** (`media-toolbox-gpu`, Gradio SDK + ZeroGPU) — every CPU
+  FFmpeg tool plus Whisper, Demucs, and Real-ESRGAN. Entrypoint:
+  `main/gpu/app.py`.
 
 Both use the same manifest schema, bucket layout (`jobs/<expires>_<job_id>/`),
 and 24-hour job history.
@@ -48,6 +49,8 @@ inputs.
 
 ## Features (GPU Space, ZeroGPU)
 
+- Every basic Video, Audio, Subtitle, Utility, and Advanced FFmpeg operation
+  from the CPU Space is available in the GPU Space too
 - **AI Transcription** (Whisper large-v3-turbo): transcribe or translate to
   English, 22 languages + auto-detect, segment or word-level timestamps,
   outputs TXT + SRT + VTT + JSON
@@ -60,6 +63,13 @@ inputs.
   FFmpeg pre/post-processing stays on the CPU worker
 - Same 24-hour bucket history as the CPU Space; an optional header link jumps
   back to it (`CPU_SPACE_URL`)
+
+Both Spaces stream uploads into the work filesystem and hard-link uploaded
+inputs into job directories when possible, avoiding a second full-file copy.
+One global activity gate permits only one upload or conversion at a time. A
+password-protected force-cancel control uses `TOOLBOX_PASSWORD`. Results are
+served by expiry-checked HTTP routes with byte-range support, and the UI has a
+persistent light/dark toggle stored in the browser.
 
 ## Architecture
 
@@ -89,10 +99,11 @@ Shared:
 | `HF_BUCKET_ID` | _(empty)_ | Bucket id, e.g. `user/media-toolbox` (informational) |
 | `RETENTION_HOURS` | `24` | Output retention |
 | `WORK_DIR` | `/tmp/media-toolbox` | Ephemeral processing directory |
-| `MAX_CONCURRENT_CPU_JOBS` | `1` | Encoding concurrency (rest queue) |
+| `MAX_CONCURRENT_CPU_JOBS` | `1` | Worker safety limit; the global gate rejects concurrent work |
 | `MIN_FREE_DISK_GB` | `2.0` | Refuse jobs below this free space |
 | `MAX_INPUT_SIZE_GB` | `8.0` | Upload size limit |
 | `PORT` | `7860` | HTTP port |
+| `TOOLBOX_PASSWORD` | _(empty)_ | Force-cancel password; set the same secret on both Spaces |
 
 GPU Space only:
 
@@ -107,6 +118,8 @@ GPU Space only:
 | `GPU_VIDEO_MAX_FILE_SIZE_GB` | `1.0` | Video upscale input size limit |
 | `CPU_SPACE_URL` | _(empty)_ | Header link back to the CPU Space |
 | `MODEL_CACHE_DIR` | `$WORK_DIR/models` | Model weight cache directory |
+| `TOOLBOX_USERNAME` | _(empty)_ | GPU Space login username |
+| `TOOLBOX_PASSWORD` | _(empty)_ | GPU Space login and force-cancel password |
 
 ## Local development
 
@@ -163,6 +176,7 @@ colorTo: indigo
 sdk: gradio
 app_file: main/gpu/app.py
 python_version: 3.12.12
+disable_embedding: true
 ---
 ```
 
@@ -178,9 +192,10 @@ Space contains no Dockerfile. The deploy helper publishes
 `requirements.gpu.txt` / `packages.gpu.txt` as root `requirements.txt` /
 `packages.txt`, which are the filenames the Gradio builder consumes.
 
-Because the Spaces are public and V1 has no user accounts, any visitor can use
-the tools and view the shared 24-hour job history exposed by the application.
-The underlying bucket itself remains private.
+The GPU app can be gated with `TOOLBOX_USERNAME` and `TOOLBOX_PASSWORD`.
+`disable_embedding: true` opens it as a first-party app instead of a
+Hugging Face iframe, avoiding browsers that block the login cookie as a
+third-party cookie. The underlying bucket remains private.
 
 ZeroGPU usage draws from each visitor's daily quota (free accounts get little,
 PRO gets more), so the UI shows a quota banner and requests short dynamic
@@ -213,6 +228,7 @@ hf jobs scheduled run \
 
 ## Known limitations
 
-- CPU Basic hardware: one job at a time by default; large files are slow.
+- Transfer speed still depends on the visitor's upstream/downstream bandwidth
+  and the Hugging Face edge path; the app cannot guarantee a fixed duration.
 - Target-size mode requires a detectable duration.
 - Image-based subtitles (PGS) cannot be exported as text.

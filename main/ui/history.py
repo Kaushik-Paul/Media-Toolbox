@@ -1,6 +1,7 @@
 """History tab: recent jobs from the shared bucket, with download and delete."""
 from __future__ import annotations
 
+import html
 import gradio as gr
 
 from backend.services import get_services
@@ -36,7 +37,7 @@ def history_tab():
 
     with gr.Group(visible=False) as detail_group:
         detail_md = gr.Markdown()
-        detail_files = gr.File(label="Outputs", file_count="multiple", interactive=False)
+        detail_files = gr.HTML()
         delete_btn = gr.Button("Delete this job", variant="stop", size="sm")
     selected_prefix = gr.State("")
 
@@ -53,15 +54,19 @@ def history_tab():
         services = get_services()
         try:
             manifest = services.storage.get_manifest(prefix)
-            paths = [str(services.storage.jobs_root / prefix / o.filename) for o in manifest.outputs]
         except Exception:
             return gr.update(visible=False), None, "", ""
+        links = "".join(
+            f"<li><a href='/api/jobs/{prefix}/download/{o.id}' download>"
+            f"{html.escape(o.filename)}</a> <span class='dim'>({format_size(o.size)})</span></li>"
+            for o in manifest.outputs
+        )
         detail = (
             f"**{manifest.operation.replace('_', ' ').title()}** — `{manifest.original_filename}`  \n"
             f"Source: {manifest.source.upper()} · Completed: {manifest.completed_at} · "
             f"Expires in {format_countdown(seconds_until(manifest.expires_unix))}"
         )
-        return gr.update(visible=True), paths, detail, prefix
+        return gr.update(visible=True), f"<ul class='download-list'>{links}</ul>", detail, prefix
 
     table.select(fn=_select, inputs=[prefixes_state], outputs=[detail_group, detail_files, detail_md, selected_prefix])
 

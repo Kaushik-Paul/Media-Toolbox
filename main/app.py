@@ -23,6 +23,7 @@ from fastapi import FastAPI
 
 from backend.download import router as api_router
 from backend.services import init_services
+from core.http_activity import ExclusiveUploadMiddleware
 
 services = init_services()
 
@@ -35,11 +36,11 @@ from ui.app import build_blocks
 
 blocks = build_blocks()
 
-from ui.theme import CSS, FORCE_DARK_JS, THEME, ForceDarkThemeMiddleware
+from ui.theme import CSS, THEME, THEME_JS
 
-# Allow Gradio to serve result files directly from the bucket mount for
-# previews and in-UI downloads.
-_allowed = [str(services.storage.root), str(services.settings.work_dir)]
+# Uploaded temporary files remain available to Gradio. Results are served only
+# by the expiry-checked, byte-range-capable FastAPI download route.
+_allowed = [str(services.settings.work_dir)]
 
 app = gr.mount_gradio_app(
     app,
@@ -47,13 +48,11 @@ app = gr.mount_gradio_app(
     path="/",
     theme=THEME,
     css=CSS,
-    js=FORCE_DARK_JS,
+    js=THEME_JS,
     allowed_paths=_allowed,
     max_file_size=f"{int(services.settings.max_input_size_gb)}gb",
 )
-
-app.add_middleware(ForceDarkThemeMiddleware)
-
+app.add_middleware(ExclusiveUploadMiddleware, activity=services.activity)
 
 if __name__ == "__main__":
     import uvicorn

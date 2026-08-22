@@ -139,11 +139,10 @@ def _weights_path(model_label: str, scale: int, cache_dir: Path) -> tuple[Path, 
 
 
 def _get_model(model_label: str, scale: int):
-    """Build (once per variant) the RRDBNet model in the main process.
+    """Build a CPU-resident RRDBNet model once per variant.
 
     Must run OUTSIDE @spaces.GPU functions (ZeroGPU forks are throwaway);
-    CUDA emulation makes `.to("cuda")` a no-op there and forks inherit the
-    loaded model.
+    Decorated forks move their inherited copy to the real GPU.
     """
     cache_key = (model_label, scale)
     with _model_lock:
@@ -159,8 +158,6 @@ def _get_model(model_label: str, scale: int):
         state = torch.load(str(weights), map_location="cpu", weights_only=True)
         model.load_state_dict(state.get("params_ema") or state.get("params") or state, strict=True)
         model.eval()
-        if torch.cuda.is_available():
-            model = model.to("cuda").half()
         result = (model, model_scale)
         _model_cache[cache_key] = result
         return result
@@ -248,9 +245,12 @@ def estimate_frames_duration(frame_paths: list, out_dir: str,
 def upscale_frames(frame_paths: list, out_dir: str, model_label: str = "General",
                    scale: int = 4) -> list:
     """Upscale a chunk of frame PNGs. Returns the output frame paths."""
+    import torch
     from PIL import Image
 
     model, model_scale = _cached_model(model_label, scale)
+    if torch.cuda.is_available():
+        model = model.to("cuda").half()
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     written = []
@@ -267,9 +267,12 @@ def upscale_frames(frame_paths: list, out_dir: str, model_label: str = "General"
 def upscale_image_file(image_path: str, out_path: str, model_label: str = "General",
                        scale: int = 4, out_format: str = "PNG") -> str:
     """Upscale a single image file."""
+    import torch
     from PIL import Image
 
     model, model_scale = _cached_model(model_label, scale)
+    if torch.cuda.is_available():
+        model = model.to("cuda").half()
     with Image.open(image_path) as img:
         result = _upscale_one(model, model_scale, img.convert("RGB"), scale)
     save_kwargs = {"format": "JPEG", "quality": 95} if out_format == "JPG" else {"format": out_format}

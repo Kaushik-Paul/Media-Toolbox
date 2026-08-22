@@ -7,6 +7,8 @@ import gradio as gr
 
 from gpu.backend.services import get_services
 from gpu.ui import history, stems, transcription, upscale
+from ui.app import build_basic_tool_tabs
+from ui.shell import global_controls
 
 QUOTA_BANNER = """
 <div class='media-info-card' style='margin-bottom:0.8rem'>
@@ -35,6 +37,7 @@ def build_blocks() -> gr.Blocks:
     # theme/css are applied in main/gpu/app.py via gr.mount_gradio_app (Gradio 6 API).
     with gr.Blocks(title="Media AI Toolbox") as blocks:
         gr.HTML(_header())
+        global_controls()
         gr.HTML(QUOTA_BANNER)
         with gr.Tabs():
             with gr.Tab("Transcription"):
@@ -43,6 +46,7 @@ def build_blocks() -> gr.Blocks:
                 stems.stems_tab()
             with gr.Tab("AI Upscaling"):
                 upscale.upscale_tab()
+            build_basic_tool_tabs(include_history=False)
             with gr.Tab("History"):
                 history.history_tab()
     return blocks

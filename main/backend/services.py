@@ -9,6 +9,7 @@ from backend.job_manager import JobManager
 from backend.probe import FFprobeService
 from core.config import Settings, get_settings
 from core.storage.bucket import BucketStorage
+from core.activity import ActivityCoordinator, get_activity
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ class Services:
     capabilities: FFmpegCapabilities
     jobs: JobManager
     dev_bucket: bool
+    activity: ActivityCoordinator
 
 
 _services: Services | None = None
@@ -53,9 +55,10 @@ def init_services() -> Services:
     storage = BucketStorage(bucket_root)
     probe = FFprobeService(settings.ffprobe_path)
     capabilities = detect_capabilities(settings.ffmpeg_path)
-    jobs = JobManager(settings, storage, probe, capabilities)
+    activity = get_activity()
+    jobs = JobManager(settings, storage, probe, capabilities, activity)
 
-    _services = Services(settings, storage, probe, capabilities, jobs, dev_bucket)
+    _services = Services(settings, storage, probe, capabilities, jobs, dev_bucket, activity)
     _log_startup(_services)
     return _services
 
@@ -64,6 +67,12 @@ def get_services() -> Services:
     if _services is None:
         return init_services()
     return _services
+
+
+def set_services(services: Services) -> None:
+    """Install shared services when the GPU Space hosts the CPU tool UI too."""
+    global _services
+    _services = services
 
 
 def _log_startup(s: Services) -> None:
