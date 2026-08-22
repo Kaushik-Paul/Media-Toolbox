@@ -306,14 +306,18 @@ def upload_row(label: str = "Drop media here", file_types: list[str] | None = No
             "Supports direct media URLs and public Google Drive, OneDrive, or "
             "SharePoint file links. Private/local network addresses are blocked."
         )
-        with gr.Row():
+        with gr.Row(equal_height=True, elem_classes=["url-fetch-actions"]):
             source_url = gr.Textbox(
                 label="Media URL",
-                placeholder="https://...",
+                placeholder="Paste media URL",
+                show_label=False,
                 max_lines=1,
                 scale=4,
+                min_width=300,
             )
-            fetch_button = gr.Button("Fetch URL", variant="secondary", scale=1)
+            fetch_button = gr.Button(
+                "Fetch URL", variant="secondary", scale=1, min_width=160
+            )
         fetch_status = gr.HTML(elem_classes=["url-fetch-progress"])
     info_html = gr.HTML()
     info_state = gr.State({})

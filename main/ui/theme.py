@@ -38,6 +38,14 @@ CSS = """
 .activity-actions input,
 .activity-actions button { min-height: 42px; }
 
+.url-fetch-actions {
+    align-items: center;
+    gap: 0.75rem;
+}
+.url-fetch-actions > * { margin: 0 !important; }
+.url-fetch-actions input,
+.url-fetch-actions button { min-height: 42px; }
+
 /* Gradio's full progress animation is positioned over every event output by
    default. URL fetches target only this reserved slot, keeping the file input,
    URL controls, and tool tabs stable while the remote file downloads. */
@@ -102,6 +110,8 @@ CSS = """
     .result-stats { gap: 1rem; }
     .activity-actions { align-items: stretch; }
     .activity-actions > * { min-width: 100% !important; }
+    .url-fetch-actions { align-items: stretch; }
+    .url-fetch-actions > * { min-width: 100% !important; }
 }
 """
 
