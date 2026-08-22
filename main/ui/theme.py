@@ -17,6 +17,10 @@ THEME = gr.themes.Soft(
 )
 
 CSS = """
+/* Gradio SDK Spaces inject Hugging Face's floating repository badge into the
+   application document. Keep custom-domain pages focused on the toolbox. */
+#huggingface-space-header { display: none !important; }
+
 .app-header { text-align: center; margin-bottom: 0.5rem; }
 .app-header h1 { font-size: 2rem; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 0.1rem; }
 .app-header p { color: var(--body-text-color-subdued); margin-top: 0; }

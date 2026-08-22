@@ -48,6 +48,7 @@ logging.basicConfig(
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
 
+from core.branding import FAVICON_HEAD, FAVICON_PATH
 from core.storage.bucket import JobExpiredError, JobNotFoundError
 from core.http_activity import ExclusiveUploadMiddleware
 from core.storage.retention import seconds_until
@@ -61,6 +62,15 @@ services = init_services()
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
 app = FastAPI(title="Media AI Toolbox", version=services.settings.app_version)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> FileResponse:
+    return FileResponse(
+        FAVICON_PATH,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @app.get("/_health")
@@ -196,6 +206,8 @@ app = gr.mount_gradio_app(
     theme=THEME,
     css=CSS,
     js=THEME_JS,
+    head=FAVICON_HEAD,
+    favicon_path=str(FAVICON_PATH),
     auth_dependency=_auth_dependency,
     allowed_paths=_allowed,
     max_file_size=f"{int(services.settings.max_input_size_gb)}gb",
