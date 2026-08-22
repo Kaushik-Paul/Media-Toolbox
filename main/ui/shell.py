@@ -29,12 +29,20 @@ def global_controls() -> None:
             "Only one upload or conversion can run at a time. Force cancel is "
             "protected by the same `TOOLBOX_PASSWORD` used by the GPU login."
         )
-        with gr.Row():
+        with gr.Row(equal_height=True, elem_classes=["activity-actions"]):
             password = gr.Textbox(
-                label="Cancel password", type="password", max_lines=1, scale=3
+                label="Cancel password",
+                placeholder="Cancel password",
+                show_label=False,
+                type="password",
+                max_lines=1,
+                scale=2,
+                min_width=220,
             )
-            status_btn = gr.Button("Check activity", scale=1)
-            cancel_btn = gr.Button("Force cancel current", variant="stop", scale=1)
+            status_btn = gr.Button("Check activity", scale=1, min_width=180)
+            cancel_btn = gr.Button(
+                "Force cancel current", variant="stop", scale=1, min_width=220
+            )
         status = gr.HTML()
 
         def _status_html() -> str:
