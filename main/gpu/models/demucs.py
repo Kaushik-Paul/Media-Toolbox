@@ -30,24 +30,20 @@ _model_lock = threading.Lock()
 
 
 def _get_model(name: str):
-    """Load (once) the Demucs model in the main process.
+    """Load (once) a CPU-resident Demucs model in the main process.
 
     Must run OUTSIDE @spaces.GPU functions (ZeroGPU forks are throwaway);
-    CUDA emulation makes the `.to("cuda")` below a no-op there and forks
-    inherit the loaded model.
+    The decorated fork moves its inherited copy to the real GPU.
     """
     global _model
     with _model_lock:
         if _model is not None:
             return _model
-        import torch
         from demucs.pretrained import get_model
 
         log.info("loading Demucs model %s", name)
         _model = get_model(name)
         _model.eval()
-        if torch.cuda.is_available():
-            _model.to("cuda")
         return _model
 
 
@@ -82,6 +78,7 @@ def separate(audio_path: str, out_dir: str, mode: str = "Vocals + Instrumental",
     # fallback only triggers in local dev when separate() is called directly.
     model = _model if _model is not None else _get_model(model_name)
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    model.to(device)
 
     wav = AudioFile(audio_path).read(
         streams=0, samplerate=model.samplerate, channels=model.audio_channels
@@ -141,7 +138,7 @@ def run(ctx: JobContext, inputs: list[Path], params: dict) -> OperationResult:
                                progress_span=(2.0, 10.0))
 
     ctx.check_cancelled()
-    # Load in the main process so the ZeroGPU fork inherits the model.
+    # Cache on CPU in the main process so the ZeroGPU fork inherits the model.
     _get_model(ctx.gpu_settings.demucs_model)
     ctx.report(12.0, "Separating stems on GPU (ZeroGPU quota is used)")
     stems_dir = ctx.work_dir / "stems"

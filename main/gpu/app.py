@@ -21,6 +21,10 @@ for _path in (str(REPO_ROOT), str(MAIN_DIR)):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
+# Shared FFmpeg operations executed inside this Space should be recorded as
+# GPU-Space jobs even though their work itself stays on CPU.
+os.environ.setdefault("APP_SOURCE", "gpu")
+
 # Local dev keeps secrets in a .env at the repo root; on Hugging Face they
 # come from Space secrets, so a missing file or package is fine.
 try:
@@ -45,6 +49,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
 from core.storage.bucket import JobExpiredError, JobNotFoundError
+from core.http_activity import ExclusiveUploadMiddleware
 from core.storage.retention import seconds_until
 from core.time_utils import format_countdown
 
@@ -134,7 +139,7 @@ def delete_job(prefix: str) -> dict:
 import gradio as gr
 
 from gpu.ui.app import build_blocks
-from ui.theme import CSS, FORCE_DARK_JS, THEME, ForceDarkThemeMiddleware  # shared visual identity from the CPU Space
+from ui.theme import CSS, THEME, THEME_JS  # shared visual identity from the CPU Space
 
 blocks = build_blocks()
 
@@ -157,7 +162,7 @@ app = gr.mount_gradio_app(
     path="/",
     theme=THEME,
     css=CSS,
-    js=FORCE_DARK_JS,
+    js=THEME_JS,
     auth=_auth,
     allowed_paths=_allowed,
     max_file_size=f"{int(services.settings.max_input_size_gb)}gb",
@@ -205,8 +210,7 @@ class _PersistAuthCookieMiddleware:
 
 if _auth is not None:
     app.add_middleware(_PersistAuthCookieMiddleware)
-app.add_middleware(ForceDarkThemeMiddleware)
-
+app.add_middleware(ExclusiveUploadMiddleware, activity=services.activity)
 # ZeroGPU normally discovers decorated functions when Blocks.launch() runs.
 # This app mounts Gradio under FastAPI, so explicitly execute the equivalent
 # registration hook after build_blocks() has imported every model module.

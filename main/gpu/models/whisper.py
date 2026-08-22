@@ -62,12 +62,12 @@ _pipe_lock = threading.Lock()
 
 
 def _get_pipeline(model_id: str):
-    """Build (once) the ASR pipeline in the main process.
+    """Build (once) a CPU-resident ASR pipeline in the main process.
 
-    Must run OUTSIDE @spaces.GPU functions: ZeroGPU executes those in a
-    throwaway fork, so a model loaded inside one would be reloaded on every
-    call. CUDA emulation lets the load + `.to("cuda")` succeed in the main
-    process, and each fork then inherits the loaded model.
+    ZeroGPU executes decorated functions in a throwaway fork. Keeping the
+    cached parent model on CPU avoids low-level CUDA initialization from an
+    ordinary Gradio worker thread; the fork moves its inherited copy to the
+    real GPU inside ``transcribe``.
     """
     global _pipe
     with _pipe_lock:
@@ -76,14 +76,13 @@ def _get_pipeline(model_id: str):
         import torch
         from transformers import pipeline
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        dtype = torch.float16 if device == "cuda" else torch.float32
-        log.info("loading Whisper model %s on %s", model_id, device)
+        dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+        log.info("loading Whisper model %s into the parent CPU cache", model_id)
         _pipe = pipeline(
             "automatic-speech-recognition",
             model=model_id,
             torch_dtype=dtype,
-            device=device,
+            device="cpu",
             model_kwargs={"attn_implementation": "sdpa"},
         )
         return _pipe
@@ -116,10 +115,14 @@ def transcribe(audio_path: str, language: str | None = None,
     """Run Whisper on a 16 kHz mono WAV. Returns the raw pipeline result."""
     import numpy as np
     import soundfile as sf
+    import torch
 
     # In a ZeroGPU fork the pipeline is inherited from the main process; the
     # fallback only triggers in local dev when transcribe() is called directly.
     pipe = _pipe if _pipe is not None else _get_pipeline(_current_model_id())
+    if torch.cuda.is_available():
+        pipe.model.to("cuda")
+        pipe.device = torch.device("cuda")
     audio, sr = sf.read(audio_path, dtype="float32")
     if audio.ndim > 1:
         audio = audio.mean(axis=1)
@@ -169,7 +172,7 @@ def run(ctx: JobContext, inputs: list[Path], params: dict) -> OperationResult:
                                progress_span=(2.0, 12.0))
 
     ctx.check_cancelled()
-    # Load in the main process so the ZeroGPU fork inherits the model.
+    # Cache on CPU in the main process so the ZeroGPU fork inherits the model.
     _get_pipeline(ctx.gpu_settings.whisper_model)
     ctx.report(15.0, "Transcribing on GPU (ZeroGPU quota is used)")
     result = transcribe(str(audio_path), LANGUAGES[language_label], task, word_timestamps)

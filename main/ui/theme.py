@@ -1,7 +1,5 @@
-"""Visual identity shared by the CPU Space (and later the GPU Space)."""
+"""Visual identity and persistent light/dark preference."""
 from __future__ import annotations
-
-from urllib.parse import parse_qsl, urlencode
 
 import gradio as gr
 
@@ -22,6 +20,15 @@ CSS = """
 .app-header { text-align: center; margin-bottom: 0.5rem; }
 .app-header h1 { font-size: 2rem; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 0.1rem; }
 .app-header p { color: var(--body-text-color-subdued); margin-top: 0; }
+.theme-toggle-wrap { display: flex; justify-content: flex-end; margin: -0.35rem 0 0.45rem; }
+#theme-toggle {
+    border: 1px solid var(--border-color-primary); border-radius: 999px;
+    padding: 0.42rem 0.78rem; background: var(--background-fill-secondary);
+    color: var(--body-text-color); cursor: pointer; font: inherit;
+    display: inline-flex; align-items: center; gap: 0.45rem;
+}
+#theme-toggle:hover { border-color: var(--color-accent); transform: translateY(-1px); }
+.theme-toggle-icon { font-size: 1.15rem; line-height: 1; }
 
 .media-info-card {
     border: 1px solid var(--border-color-primary);
@@ -64,6 +71,9 @@ CSS = """
 .result-stats .stat span { font-size: 0.8rem; color: var(--body-text-color-subdued); }
 
 .expiry-note { font-size: 0.85rem; color: var(--body-text-color-subdued); }
+.result-preview { display: block; max-width: 100%; max-height: 32rem; border-radius: 10px; margin-top: 0.8rem; }
+.result-audio { display: block; width: 100%; margin-top: 0.35rem; }
+.download-list { margin: 0.7rem 0 0.25rem; }
 .error-card {
     border: 1px solid #ef4444; border-radius: 12px; padding: 0.9rem 1.1rem;
     background: rgba(239, 68, 68, 0.08);
@@ -75,51 +85,43 @@ CSS = """
 }
 """
 
-# Gradio follows the visitor's system/browser theme unless the URL carries
-# ?__theme=dark. Gradio 6 injects this snippet verbatim as a <script> body,
-# so it must be an IIFE: a bare function expression would never be called.
-FORCE_DARK_JS = """
+# Gradio selects its palette from the __theme query parameter. Persist the
+# visitor's explicit choice and reload only when the palette actually changes.
+THEME_JS = """
 (() => {
+    const storageKey = "media-toolbox-theme";
+    const readSaved = () => {
+        try { return localStorage.getItem(storageKey); } catch (_) { return null; }
+    };
+    const writeSaved = (value) => {
+        try { localStorage.setItem(storageKey, value); } catch (_) {}
+    };
+    const systemTheme = () => window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark" : "light";
     const url = new URL(window.location.href);
-    if (url.searchParams.get("__theme") !== "dark") {
-        url.searchParams.set("__theme", "dark");
+    const saved = readSaved();
+    const desired = saved === "dark" || saved === "light" ? saved : systemTheme();
+    if (url.searchParams.get("__theme") !== desired) {
+        url.searchParams.set("__theme", desired);
         window.location.replace(url.toString());
+        return;
     }
+
+    const refreshLabel = () => {
+        const label = document.querySelector("#theme-toggle .theme-toggle-label");
+        if (label) label.textContent = desired === "dark" ? "Light mode" : "Dark mode";
+    };
+    document.addEventListener("click", (event) => {
+        const button = event.target.closest && event.target.closest("#theme-toggle");
+        if (!button) return;
+        event.preventDefault();
+        const next = desired === "dark" ? "light" : "dark";
+        writeSaved(next);
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.set("__theme", next);
+        window.location.replace(nextUrl.toString());
+    }, true);
+    new MutationObserver(refreshLabel).observe(document.documentElement, {childList: true, subtree: true});
+    refreshLabel();
 })();
 """
-
-
-class ForceDarkThemeMiddleware:
-    """Redirect Gradio page loads to ?__theme=dark.
-
-    Server-side (unlike FORCE_DARK_JS) so it also covers the login page,
-    whose config does not include custom js.
-    """
-
-    def __init__(self, app):
-        self.app = app
-
-    async def __call__(self, scope, receive, send):
-        if (
-            scope["type"] == "http"
-            and scope.get("method") in ("GET", "HEAD")
-            and scope.get("path", "").rstrip("/") == ""
-        ):
-            params = parse_qsl(
-                scope.get("query_string", b"").decode(), keep_blank_values=True
-            )
-            if ("__theme", "dark") not in params:
-                params = [(k, v) for k, v in params if k != "__theme"]
-                params.append(("__theme", "dark"))
-                location = "/?" + urlencode(params)
-                await send({
-                    "type": "http.response.start",
-                    "status": 302,
-                    "headers": [
-                        (b"location", location.encode()),
-                        (b"content-length", b"0"),
-                    ],
-                })
-                await send({"type": "http.response.body", "body": b""})
-                return
-        await self.app(scope, receive, send)

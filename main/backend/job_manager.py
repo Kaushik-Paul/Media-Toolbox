@@ -14,7 +14,9 @@ from backend.capabilities import FFmpegCapabilities
 from backend.ffmpeg_runner import FFmpegCancelled, FFmpegError, FFmpegRunner, ProgressUpdate
 from backend.probe import FFprobeService
 from core.config import Settings
+from core.activity import ActivityBusyError, ActivityCoordinator, get_activity
 from core.filenames import new_job_id, sanitize_filename
+from core.local_files import stage_input
 from core.manifests import build_manifest
 from core.media_types import mime_for
 from core.models import MediaInfo, OutputFile
@@ -93,12 +95,14 @@ class JobManager:
         storage: BucketStorage,
         probe: FFprobeService,
         capabilities: FFmpegCapabilities,
+        activity: ActivityCoordinator | None = None,
     ):
         self.settings = settings
         self.storage = storage
         self.probe = probe
         self.capabilities = capabilities
         self.runner = FFmpegRunner(log_tail_lines=settings.log_tail_lines)
+        self.activity = activity or get_activity()
         self._semaphore = threading.Semaphore(settings.max_concurrent_jobs)
         self._jobs: dict[str, JobState] = {}
         self._lock = threading.Lock()
@@ -131,12 +135,23 @@ class JobManager:
             original_filename=sanitize_filename(original_filename),
             input_size=total_input,
         )
+        try:
+            lease = self.activity.begin("job", f"{operation.replace('_', ' ')} job")
+        except ActivityBusyError as exc:
+            raise OperationError(str(exc)) from exc
+        self.activity.set_cancel_callback(lease.token, state.cancel_event.set)
         with self._lock:
             self._jobs[job_id] = state
-        thread = threading.Thread(
-            target=self._run, args=(state, [Path(p) for p in input_paths], params), daemon=True
-        )
-        thread.start()
+        try:
+            thread = threading.Thread(
+                target=self._run,
+                args=(state, [Path(p) for p in input_paths], params, lease.token),
+                daemon=True,
+            )
+            thread.start()
+        except Exception:
+            self.activity.finish(lease.token)
+            raise
         return job_id
 
     def get(self, job_id: str) -> JobState | None:
@@ -169,7 +184,9 @@ class JobManager:
                 f"free={free / (1024 ** 3):.1f}GB required~={required / (1024 ** 3):.1f}GB",
             )
 
-    def _run(self, state: JobState, input_paths: list[Path], params: dict) -> None:
+    def _run(
+        self, state: JobState, input_paths: list[Path], params: dict, activity_token: str
+    ) -> None:
         job_id = state.job_id
         work_dir = self.settings.work_dir / job_id
         try:
@@ -184,7 +201,7 @@ class JobManager:
                 local_inputs: list[Path] = []
                 for i, src in enumerate(input_paths):
                     dest = work_dir / f"input_{i}{src.suffix.lower()}"
-                    shutil.copyfile(src, dest)
+                    stage_input(src, dest)
                     local_inputs.append(dest)
 
                 try:
@@ -216,7 +233,10 @@ class JobManager:
                     media_info=media_info,
                 )
 
-                log.info("job=%s source=cpu operation=%s stage=start", job_id[:8], state.operation)
+                log.info(
+                    "job=%s source=%s operation=%s stage=start",
+                    job_id[:8], self.settings.source, state.operation,
+                )
                 result: OperationResult = OPERATIONS[state.operation].run(ctx, local_inputs, params)
 
                 self._set(state, JobStatus.FINALIZING, "Verifying output")
@@ -232,8 +252,9 @@ class JobManager:
                 self.metrics.output_bytes += job_result.output_size
                 self.metrics.bucket_uploads += 1
                 log.info(
-                    "job=%s source=cpu operation=%s stage=done elapsed=%.1f status=success",
-                    job_id[:8], state.operation, job_result.processing_seconds,
+                    "job=%s source=%s operation=%s stage=done elapsed=%.1f status=success",
+                    job_id[:8], self.settings.source, state.operation,
+                    job_result.processing_seconds,
                 )
         except FFmpegCancelled:
             state.finished_at = time.time()
@@ -263,6 +284,7 @@ class JobManager:
             log.exception("job=%s operation=%s status=failed unexpected", job_id[:8], state.operation)
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
+            self.activity.finish(activity_token)
 
     def _persist(
         self,

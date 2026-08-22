@@ -49,10 +49,12 @@ class Settings:
     gif_max_duration_seconds: float = 30.0
 
     port: int = 7860
+    cancel_password: str = ""
 
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
+            source=_env_str("APP_SOURCE", "cpu"),
             retention_hours=_env_int("RETENTION_HOURS", 24),
             bucket_id=_env_str("HF_BUCKET_ID", ""),
             bucket_mount=Path(_env_str("BUCKET_MOUNT", "/data/media-bucket")),
@@ -66,6 +68,7 @@ class Settings:
             target_size_safety_factor=_env_float("TARGET_SIZE_SAFETY_FACTOR", 0.97),
             gif_max_duration_seconds=_env_float("GIF_MAX_DURATION_SECONDS", 30.0),
             port=_env_int("PORT", 7860),
+            cancel_password=_env_str("TOOLBOX_PASSWORD", ""),
         )
 
 
