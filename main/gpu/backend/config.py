@@ -6,9 +6,16 @@ knobs from PLAN.md section 74. Environment variables override defaults.
 """
 from __future__ import annotations
 
+import logging
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable, TypeVar
+
+
+log = logging.getLogger(__name__)
+_T = TypeVar("_T")
 
 
 def _env_str(name: str, default: str) -> str:
@@ -116,6 +123,46 @@ def gpu(duration=None):
 
 def on_zerogpu() -> bool:
     return _spaces is not None and os.environ.get("SPACE_ID") is not None
+
+
+def call_gpu_with_retry(
+    fn: Callable[..., _T],
+    *args,
+    on_retry: Callable[[str], None] | None = None,
+    max_attempts: int = 3,
+    **kwargs,
+) -> _T:
+    """Call a decorated GPU function, retrying transient allocator timeouts.
+
+    ZeroGPU can return ``No GPU was available after 60s`` when its shared pool
+    is temporarily saturated. Retrying that specific condition is safe because
+    the GPU function has not started. Quota, duration, worker, and inference
+    errors are deliberately not retried.
+    """
+    attempts = max(1, max_attempts)
+    for attempt in range(1, attempts + 1):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as exc:
+            transient = "no gpu was available" in str(exc).lower()
+            if not on_zerogpu() or not transient or attempt >= attempts:
+                raise
+            delay = 2 ** (attempt - 1)
+            message = (
+                f"Shared GPU is busy; retrying allocation "
+                f"({attempt + 1}/{attempts})"
+            )
+            log.warning(
+                "ZeroGPU allocation timed out; retrying attempt=%d/%d delay=%ds",
+                attempt + 1,
+                attempts,
+                delay,
+            )
+            if on_retry is not None:
+                on_retry(message)
+            time.sleep(delay)
+
+    raise RuntimeError("unreachable")
 
 
 def report_zerogpu_startup() -> bool:

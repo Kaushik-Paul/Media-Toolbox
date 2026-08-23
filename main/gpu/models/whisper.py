@@ -14,7 +14,7 @@ from pathlib import Path
 
 from core.filenames import output_name
 
-from gpu.backend.config import gpu
+from gpu.backend.config import call_gpu_with_retry, gpu
 from gpu.backend.job_manager import JobContext, OperationError, OperationResult, ProducedOutput
 from gpu.backend.postprocessing import (
     group_words_to_cues,
@@ -175,7 +175,14 @@ def run(ctx: JobContext, inputs: list[Path], params: dict) -> OperationResult:
     # Cache on CPU in the main process so the ZeroGPU fork inherits the model.
     _get_pipeline(ctx.gpu_settings.whisper_model)
     ctx.report(15.0, "Transcribing on GPU (ZeroGPU quota is used)")
-    result = transcribe(str(audio_path), LANGUAGES[language_label], task, word_timestamps)
+    result = call_gpu_with_retry(
+        transcribe,
+        str(audio_path),
+        LANGUAGES[language_label],
+        task,
+        word_timestamps,
+        on_retry=lambda message: ctx.report(15.0, message),
+    )
 
     ctx.check_cancelled()
     ctx.report(90.0, "Writing transcript files")

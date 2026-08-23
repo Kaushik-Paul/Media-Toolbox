@@ -15,7 +15,7 @@ from pathlib import Path
 
 from core.filenames import output_name
 
-from gpu.backend.config import gpu
+from gpu.backend.config import call_gpu_with_retry, gpu
 from gpu.backend.job_manager import JobContext, OperationError, OperationResult, ProducedOutput
 from gpu.backend.postprocessing import convert_audio, zip_outputs
 from gpu.backend.preprocessing import extract_audio
@@ -142,7 +142,14 @@ def run(ctx: JobContext, inputs: list[Path], params: dict) -> OperationResult:
     _get_model(ctx.gpu_settings.demucs_model)
     ctx.report(12.0, "Separating stems on GPU (ZeroGPU quota is used)")
     stems_dir = ctx.work_dir / "stems"
-    stems = separate(str(audio_path), str(stems_dir), mode, ctx.gpu_settings.demucs_model)
+    stems = call_gpu_with_retry(
+        separate,
+        str(audio_path),
+        str(stems_dir),
+        mode,
+        ctx.gpu_settings.demucs_model,
+        on_retry=lambda message: ctx.report(12.0, message),
+    )
 
     ctx.check_cancelled()
     ctx.report(85.0, f"Encoding {fmt.upper()} outputs")
