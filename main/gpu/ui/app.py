@@ -8,6 +8,7 @@ import gradio as gr
 from gpu.backend.services import get_services
 from gpu.ui import history, stems, transcription, upscale
 from ui.app import build_basic_tool_tabs
+from ui.components import upload_row
 from ui.shell import global_controls
 
 QUOTA_BANNER = """
@@ -39,16 +40,28 @@ def build_blocks() -> gr.Blocks:
         gr.HTML(_header())
         global_controls()
         gr.HTML(QUOTA_BANNER)
+        gr.Markdown(
+            "Upload once, then reuse this media in the compatible Video, Audio, "
+            "Subtitle, Transcription, Stem Separation, and AI Upscaling tools."
+        )
+        shared_media = upload_row(
+            "Shared media",
+            file_types=["video", "audio", "image"],
+        )
         with gr.Tabs():
             def _gpu_tabs() -> None:
                 with gr.Tab("Transcription"):
-                    transcription.transcription_tab()
+                    transcription.transcription_tab(shared_media)
                 with gr.Tab("Stem Separation"):
-                    stems.stems_tab()
+                    stems.stems_tab(shared_media)
                 with gr.Tab("AI Upscaling"):
-                    upscale.upscale_tab()
+                    upscale.upscale_tab(shared_media)
 
-            build_basic_tool_tabs(include_history=False, after_subtitles=_gpu_tabs)
+            build_basic_tool_tabs(
+                include_history=False,
+                after_subtitles=_gpu_tabs,
+                shared_media=shared_media,
+            )
             with gr.Tab("History"):
                 history.history_tab()
     return blocks
