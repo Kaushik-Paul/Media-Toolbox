@@ -15,6 +15,7 @@ This module reuses the shared core from ``main/`` (``core.*``,
 """
 from __future__ import annotations
 
+import contextvars
 import importlib
 import logging
 import shutil
@@ -232,9 +233,20 @@ class JobManager:
         with self._lock:
             self._jobs[job_id] = state
         try:
+            # @spaces.GPU reads the visitor's X-IP-Token from Gradio's request
+            # contextvar. Plain threads do not inherit contextvars, so preserve
+            # the submitting event's context to keep ZeroGPU quota and queue
+            # priority attributed to the signed-in Hugging Face visitor.
+            request_context = contextvars.copy_context()
             thread = threading.Thread(
-                target=self._run,
-                args=(state, [Path(p) for p in input_paths], params, lease.token),
+                target=request_context.run,
+                args=(
+                    self._run,
+                    state,
+                    [Path(p) for p in input_paths],
+                    params,
+                    lease.token,
+                ),
                 daemon=True,
             )
             thread.start()
@@ -382,6 +394,8 @@ class JobManager:
         text = str(exc).lower()
         if "out of memory" in text or "cuda error" in text:
             return "The GPU ran out of memory. Try a smaller input or a smaller scale."
+        if "no gpu was available" in text:
+            return "Shared ZeroGPU capacity is busy after automatic retries. Try again shortly."
         if "quota" in text or "zerogpu" in text:
             return "ZeroGPU quota or queue limit reached. Try again later."
         return "Unexpected internal error."

@@ -20,7 +20,7 @@ from pathlib import Path
 
 from core.filenames import output_name
 
-from gpu.backend.config import gpu
+from gpu.backend.config import call_gpu_with_retry, gpu
 from gpu.backend.job_manager import JobContext, OperationError, OperationResult, ProducedOutput
 from gpu.backend.postprocessing import concat_chunks, encode_chunk_video, mux_original_audio
 from gpu.backend.preprocessing import extract_frames
@@ -319,7 +319,15 @@ def _run_image(ctx: JobContext, inputs: list[Path], params: dict) -> OperationRe
     # Load in the main process so the ZeroGPU fork inherits the model.
     _get_model(model_label, scale)
     ctx.report(10.0, "Upscaling on GPU (ZeroGPU quota is used)")
-    upscale_image_file(str(inputs[0]), str(final), model_label, scale, out_format)
+    call_gpu_with_retry(
+        upscale_image_file,
+        str(inputs[0]),
+        str(final),
+        model_label,
+        scale,
+        out_format,
+        on_retry=lambda message: ctx.report(10.0, message),
+    )
     if not final.exists() or final.stat().st_size == 0:
         raise OperationError("Upscaling produced no output.")
 
@@ -380,8 +388,14 @@ def _run_video(ctx: JobContext, inputs: list[Path], params: dict) -> OperationRe
 
         ctx.report(base + 2.0, f"Chunk {index + 1}/{total_chunks}: upscaling on GPU")
         out_frames_dir = frames_dir / f"out_{index:04d}"
-        written = upscale_frames([str(p) for p in in_frames], str(out_frames_dir),
-                                 model_label, scale)
+        written = call_gpu_with_retry(
+            upscale_frames,
+            [str(p) for p in in_frames],
+            str(out_frames_dir),
+            model_label,
+            scale,
+            on_retry=lambda message, progress=base + 2.0: ctx.report(progress, message),
+        )
 
         ctx.report(base + 6.0, f"Chunk {index + 1}/{total_chunks}: encoding")
         chunk_path = encode_chunk_video(ctx, out_frames_dir, len(written), fps,
