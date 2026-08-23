@@ -6,6 +6,7 @@ from collections.abc import Callable
 import gradio as gr
 
 from ui import tools
+from ui.components import UploadContext
 from ui.history import history_tab
 from ui.shell import global_controls
 
@@ -21,10 +22,16 @@ def build_basic_tool_tabs(
     *,
     include_history: bool = True,
     after_subtitles: Callable[[], None] | None = None,
+    shared_media: UploadContext | None = None,
 ) -> None:
-    """Render every shared FFmpeg tool into the current outer Tabs."""
+    """Render every shared FFmpeg tool into the current outer Tabs.
+
+    ``shared_media`` lets the GPU Space reuse its app-level media upload across
+    the compatible CPU and AI tools. The CPU Space omits it and keeps its
+    existing per-section Video, Audio, and Subtitle uploaders.
+    """
     with gr.Tab("Video"):
-        video_source = tools.video_source_upload()
+        video_source = shared_media or tools.video_source_upload()
         with gr.Tabs():
             with gr.Tab("Compress"):
                 tools.compress_tab(video_source)
@@ -55,7 +62,7 @@ def build_basic_tool_tabs(
             with gr.Tab("Remove Audio"):
                 tools.remove_audio_tab(video_source)
     with gr.Tab("Audio"):
-        audio_source = tools.audio_source_upload()
+        audio_source = shared_media or tools.audio_source_upload()
         with gr.Tabs():
             with gr.Tab("Extract from Video"):
                 tools.extract_audio_tab(audio_source)
@@ -74,7 +81,11 @@ def build_basic_tool_tabs(
             with gr.Tab("Speed"):
                 tools.audio_speed_tab(audio_source)
     with gr.Tab("Subtitles"):
-        subtitle_video, subtitle_file = tools.subtitle_source_uploads()
+        if shared_media is None:
+            subtitle_video, subtitle_file = tools.subtitle_source_uploads()
+        else:
+            subtitle_video = shared_media
+            subtitle_file = tools.subtitle_file_upload()
         with gr.Tabs():
             with gr.Tab("Extract"):
                 tools.subtitles_extract_tab(subtitle_video)

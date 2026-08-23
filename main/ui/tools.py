@@ -58,12 +58,15 @@ def subtitle_source_uploads() -> tuple[UploadContext, gr.File]:
         "Upload the video once for every Subtitle tool. A subtitle file is shared by Add Track and Burn."
     )
     video = upload_row("Shared video", VIDEO_UPLOAD)
-    subtitle = gr.File(
+    return video, subtitle_file_upload()
+
+
+def subtitle_file_upload() -> gr.File:
+    return gr.File(
         label="Shared subtitle file (for Add Track or Burn)",
         file_types=SUB_UPLOAD,
         type="filepath",
     )
-    return video, subtitle
 
 
 # ---------------------------------------------------------------------------
