@@ -112,8 +112,8 @@ clients to resume interrupted transfers.
   `jobs/<expires_unix>_<job_id>/`.
 - Results remain downloadable for **24 hours**. Expired routes return
   `410 Gone`, even if physical cleanup has not run yet.
-- An authenticated Google Cloud function removes physical bucket folders older
-  than **30 days** once per day.
+- An authenticated Google Cloud function removes expired physical bucket
+  folders hourly, using the expiry timestamp encoded in each job prefix.
 - Partial, failed, and cancelled outputs are never persisted.
 
 The CPU application is public and its History view is shared. Do not submit
@@ -326,15 +326,15 @@ Every deployment mirrors the selected staged package to the target Space and
 removes stale remote files. The helper also keeps the Spaces public and
 preserves the configured hardware and bucket attachment.
 
-### Daily physical cleanup
+### Hourly physical cleanup
 
 The application denies expired downloads after 24 hours. Deploy the separate
-authenticated cleanup function to remove bucket folders older than 30 days:
+authenticated cleanup function to remove folders after that same encoded expiry:
 
 ```bash
 GCP_PROJECT_ID=<project-id> \
 HF_BUCKET_ID=<username>/media-toolbox \
-python main/scripts/deploy_cleanup_function.py
+python3 main/scripts/deploy_cleanup_function.py
 ```
 
 The Python script deploys a second-generation Cloud Run function and Cloud
@@ -347,8 +347,7 @@ deletes that temporary bucket on success or failure.
 | `GCP_PROJECT_ID` | `adept-fountain-349605` | Google Cloud project |
 | `GCP_REGION` | `asia-south1` | Function and scheduler region |
 | `HF_BUCKET_ID` | `kaushikpaul/media-toolbox` | Bucket to clean |
-| `RETENTION_DAYS` | `30` | Physical retention period |
-| `CLEANUP_SCHEDULE` | `30 3 * * *` | Daily cron schedule |
+| `CLEANUP_SCHEDULE` | `30 * * * *` | Hourly cron schedule |
 | `CLEANUP_TIME_ZONE` | `Asia/Kolkata` | Scheduler time zone |
 
 Set `HF_TOKEN` when creating or rotating the Secret Manager value. If it is
