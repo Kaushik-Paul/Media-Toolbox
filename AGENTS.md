@@ -13,8 +13,8 @@ Hosted at **https://www.mediatoolbox.pp.ua/**.
   Real-ESRGAN. Lives in `main/gpu/`. **This is built and working.** It reuses the
   same manifest schema, bucket layout, and job-prefix convention.
 - Shared private HF Storage Bucket (`media-toolbox`) mounted at
-  `/data/media-bucket` exposes outputs for 24 hours. A daily authenticated
-  Cloud Run function physically removes job folders older than 30 days.
+  `/data/media-bucket` exposes outputs for 24 hours. An hourly authenticated
+  Cloud Run function physically removes folders after their encoded expiry.
 
 ## Repository layout
 
@@ -29,7 +29,7 @@ packages.gpu.txt     # GPU apt deps; deployed as root packages.txt
 main/                # all CPU, GPU, and shared application logic
   app.py             # entrypoint: FastAPI + Gradio mounted at "/"
   scripts/deploy_space.py  # stages and deploys the selected CPU/GPU Space
-  scripts/deploy_cleanup_function.py # deploys daily GCP bucket cleanup
+  scripts/deploy_cleanup_function.py # deploys hourly GCP bucket cleanup
   cloud_cleanup/      # Cloud Run function source (HF server-side deletion)
   core/              # config, models, filenames, time_utils, media_types,
                      # manifests, storage/ (bucket + retention)
@@ -156,7 +156,7 @@ Useful overrides: `WORK_DIR=/tmp/mt BUCKET_MOUNT=/tmp/mt-bucket`.
   - Hardware defaults: `cpu-basic` (docker), `zero-a10g` (gradio).
   - Auth via `hf auth login` or `HF_TOKEN`.
 - Attach private bucket at `/data/media-bucket` (read/write).
-- Deploy the daily 30-day physical bucket cleanup with
-  `python main/scripts/deploy_cleanup_function.py`. It targets `asia-south1`,
+- Deploy the hourly expiry-based physical bucket cleanup with
+  `python3 main/scripts/deploy_cleanup_function.py`. It targets `asia-south1`,
   invokes through an OIDC-authenticated Cloud Scheduler job, and deletes through
   the HF server-side bucket API without transferring media through Google.

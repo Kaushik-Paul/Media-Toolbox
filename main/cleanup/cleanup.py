@@ -1,7 +1,7 @@
 """Mounted-bucket maintenance utility: delete logically expired job prefixes.
 
 This remains useful for manual/local maintenance. Production physical retention
-is handled daily by ``main/cloud_cleanup/main.py`` without an HF Job.
+is handled hourly by ``main/cloud_cleanup/main.py`` without an HF Job.
 
 Usage:
     python cleanup/cleanup.py --bucket /data/media-bucket

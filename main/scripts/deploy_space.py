@@ -338,8 +338,8 @@ def main() -> None:
                 f"hf://buckets/{bucket_id}:{BUCKET_MOUNT}\n"
             )
         )
-        + "  2. Deploy/update the daily 30-day Google Cloud cleanup:\n"
-        "       python main/scripts/deploy_cleanup_function.py\n"
+        + "  2. Deploy/update the hourly expiry-based Google Cloud cleanup:\n"
+        "       python3 main/scripts/deploy_cleanup_function.py\n"
         "  3. Verify the Space build/startup logs and run /_health.\n"
         f"  4. Space: https://huggingface.co/spaces/{space_id}"
     )

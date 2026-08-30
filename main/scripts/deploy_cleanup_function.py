@@ -1,4 +1,4 @@
-"""Deploy the Media Toolbox bucket-cleanup function and daily scheduler.
+"""Deploy the Media Toolbox bucket-cleanup function and hourly scheduler.
 
 The script provisions the required Google Cloud APIs, service accounts, secret,
 second-generation Cloud Run function, and Cloud Scheduler job. It creates a
@@ -10,7 +10,7 @@ or through the matching environment variables. ``HF_TOKEN`` is intentionally
 accepted only through the environment so it does not appear in shell history.
 
 Example:
-    python main/scripts/deploy_cleanup_function.py
+    python3 main/scripts/deploy_cleanup_function.py
 """
 
 from __future__ import annotations
@@ -33,22 +33,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FUNCTION_SOURCE = PROJECT_ROOT / "main" / "cloud_cleanup"
 
 
-def positive_int(value: str) -> int:
-    """Parse a positive integer for argparse."""
-    try:
-        parsed = int(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("must be a positive integer") from exc
-    if parsed <= 0:
-        raise argparse.ArgumentTypeError("must be a positive integer")
-    return parsed
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Deploy the authenticated Media Toolbox cleanup function and its "
-            "daily Google Cloud Scheduler job."
+            "hourly Google Cloud Scheduler job."
         )
     )
     parser.add_argument(
@@ -77,14 +66,8 @@ def parse_args() -> argparse.Namespace:
         help="Hugging Face bucket in owner/name form (env: HF_BUCKET_ID).",
     )
     parser.add_argument(
-        "--retention-days",
-        type=positive_int,
-        default=os.getenv("RETENTION_DAYS", "30"),
-        help="Physical retention period (env: RETENTION_DAYS).",
-    )
-    parser.add_argument(
         "--schedule",
-        default=os.getenv("CLEANUP_SCHEDULE", "30 3 * * *"),
+        default=os.getenv("CLEANUP_SCHEDULE", "30 * * * *"),
         help="Cron schedule (env: CLEANUP_SCHEDULE).",
     )
     parser.add_argument(
@@ -442,10 +425,7 @@ def deploy(args: argparse.Namespace) -> str:
                     "--trigger-http",
                     "--no-allow-unauthenticated",
                     f"--service-account={runtime_service_account}",
-                    (
-                        f"--set-env-vars=HF_BUCKET_ID={args.bucket_id},"
-                        f"RETENTION_DAYS={args.retention_days}"
-                    ),
+                    f"--set-env-vars=HF_BUCKET_ID={args.bucket_id}",
                     f"--set-secrets=HF_TOKEN={args.secret_name}:latest",
                     "--memory=256Mi",
                     "--timeout=540s",
@@ -549,10 +529,7 @@ def main() -> None:
         signal.signal(signal.SIGTERM, previous_sigterm)
 
     print(f"Cleanup function deployed: {function_url}")
-    print(
-        f"Daily schedule: {args.schedule} ({args.time_zone}), "
-        f"retention: {args.retention_days} days"
-    )
+    print(f"Cleanup schedule: {args.schedule} ({args.time_zone})")
 
 
 if __name__ == "__main__":
