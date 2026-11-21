@@ -18,6 +18,7 @@ import httpx
 
 from core.activity import ActivityBusyError, ActivityCoordinator
 from core.filenames import sanitize_filename
+from core.time_utils import format_size
 
 
 log = logging.getLogger(__name__)
@@ -288,6 +289,16 @@ def download_remote_media(
                             )
                         first_chunk = False
                         output.write(chunk)
+                        if expected:
+                            activity.update(
+                                lease.token,
+                                min(100.0, downloaded * 100.0 / expected),
+                                f"{format_size(downloaded)} of {format_size(expected)} downloaded",
+                            )
+                        else:
+                            activity.update(
+                                lease.token, None, f"{format_size(downloaded)} downloaded"
+                            )
                         if progress:
                             progress(downloaded, expected)
                 if downloaded == 0:

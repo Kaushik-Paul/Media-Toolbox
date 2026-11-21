@@ -86,6 +86,10 @@ CSS = """
     background: linear-gradient(90deg, #6366f1, #8b5cf6);
     transition: width 0.4s ease;
 }
+.activity-status .activity-head { margin-bottom: 0.2rem; }
+.activity-status .dim { color: var(--body-text-color-subdued); font-size: 0.9rem;
+    margin-bottom: 0.55rem; }
+.activity-status .activity-bar { margin-top: 0.35rem; }
 .progress-stats { display: flex; gap: 1.4rem; flex-wrap: wrap; margin-top: 0.55rem;
     font-size: 0.88rem; color: var(--body-text-color-subdued); }
 

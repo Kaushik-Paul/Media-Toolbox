@@ -2,6 +2,18 @@
 from __future__ import annotations
 
 from core.activity import ActivityBusyError, ActivityCoordinator
+from core.time_utils import format_size
+
+
+def _content_length(scope) -> int | None:
+    for name, value in scope.get("headers") or []:
+        if name == b"content-length":
+            try:
+                length = int(value)
+            except ValueError:
+                return None
+            return length if length > 0 else None
+    return None
 
 
 class ExclusiveUploadMiddleware:
@@ -38,13 +50,31 @@ class ExclusiveUploadMiddleware:
             return
 
         response_started = False
+        total = _content_length(scope)
+        received = 0
+        self.activity.update(
+            lease.token,
+            0.0 if total else None,
+            f"Receiving {format_size(total)}" if total else "Receiving file",
+        )
 
         async def cancellable_receive():
+            nonlocal received
             if lease.cancel_event.is_set():
                 return {"type": "http.disconnect"}
             message = await receive()
             if lease.cancel_event.is_set():
                 return {"type": "http.disconnect"}
+            if message.get("type") == "http.request":
+                received += len(message.get("body") or b"")
+                if total:
+                    self.activity.update(
+                        lease.token,
+                        min(100.0, received * 100.0 / total),
+                        f"{format_size(received)} of {format_size(total)} received",
+                    )
+                else:
+                    self.activity.update(lease.token, None, f"{format_size(received)} received")
             return message
 
         async def tracked_send(message):
