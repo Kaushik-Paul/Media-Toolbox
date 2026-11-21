@@ -174,6 +174,10 @@ class JobManager:
         if text:
             state.status_text = text
 
+    def _report_activity(self, state: JobState, activity_token: str) -> None:
+        """Mirror job progress into the shared "Toolbox activity" panel."""
+        self.activity.update(activity_token, state.percent, state.status_text)
+
     def _check_disk(self, input_size: int) -> None:
         free = shutil.disk_usage(self.settings.work_dir.parent if not self.settings.work_dir.exists()
                                  else self.settings.work_dir).free
@@ -195,6 +199,7 @@ class JobManager:
                     raise FFmpegCancelled()
                 self._set(state, JobStatus.RUNNING, "Preparing")
                 state.started_at = time.time()
+                self._report_activity(state, activity_token)
                 self._check_disk(state.input_size)
 
                 work_dir.mkdir(parents=True, exist_ok=True)
@@ -220,6 +225,7 @@ class JobManager:
                     state.status_text = (
                         f"Processing... {update.processed_seconds:.1f}s media, speed {speed}"
                     )
+                    self._report_activity(state, activity_token)
 
                 ctx = JobContext(
                     job_id=job_id,
@@ -241,6 +247,7 @@ class JobManager:
 
                 self._set(state, JobStatus.FINALIZING, "Verifying output")
                 state.percent = 99.0
+                self._report_activity(state, activity_token)
                 job_result = self._persist(state, ctx, media_info, result)
                 state.result = job_result
                 state.percent = 100.0
